@@ -8,6 +8,7 @@ from scripts.run_ragas_eval import (
     build_ragas_rows,
     classify_ragas_failures,
     summarize_metric_rows,
+    summarize_metric_rows_by_category,
 )
 
 
@@ -77,6 +78,18 @@ class RagasEvalTests(unittest.TestCase):
         self.assertEqual(len(failures), 1)
         self.assertEqual(failures[0]["failure_hypothesis"], "retrieval_fail")
         self.assertIn("context_precision", failures[0]["weak_metrics"])
+
+    def test_summarize_metric_rows_by_category_returns_overview_per_group(self) -> None:
+        grouped = summarize_metric_rows_by_category(
+            [
+                {"category": "launch_decision_metric_tradeoff", "faithfulness": 1.0},
+                {"category": "launch_decision_metric_tradeoff", "faithfulness": 0.8},
+                {"category": "experiment_trust_validity", "faithfulness": 0.6},
+            ]
+        )
+
+        self.assertEqual(grouped["launch_decision_metric_tradeoff"]["faithfulness"], 0.9)
+        self.assertEqual(grouped["experiment_trust_validity"]["faithfulness"], 0.6)
 
     def test_gpt_5_point_model_uses_max_completion_tokens(self) -> None:
         class FakeLLM:

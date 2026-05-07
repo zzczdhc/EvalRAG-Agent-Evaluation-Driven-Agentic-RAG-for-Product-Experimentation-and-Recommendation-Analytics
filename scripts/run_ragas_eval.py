@@ -118,6 +118,14 @@ def summarize_metric_rows(metric_rows: list[dict[str, Any]]) -> dict[str, float 
     return summary
 
 
+def summarize_metric_rows_by_category(metric_rows: list[dict[str, Any]]) -> dict[str, dict[str, float | None]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in metric_rows:
+        category = str(row.get("category") or "uncategorized")
+        grouped.setdefault(category, []).append(row)
+    return {category: summarize_metric_rows(rows) for category, rows in sorted(grouped.items())}
+
+
 def classify_ragas_failures(
     metric_rows: list[dict[str, Any]],
     threshold: float = 0.7,
@@ -355,9 +363,14 @@ def write_report(
     metric_rows: list[dict[str, Any]],
     threshold: float,
 ) -> dict[str, Any]:
+    overall_metrics = summarize_metric_rows(metric_rows)
+    metrics_by_category = summarize_metric_rows_by_category(metric_rows)
     report = {
         "record_count": len(prepared_rows),
-        "ragas_metrics": summarize_metric_rows(metric_rows),
+        "ragas_metrics_overall": overall_metrics,
+        "ragas_metrics_by_category": metrics_by_category,
+        # Backward-compatible alias for existing tooling.
+        "ragas_metrics": overall_metrics,
         "failure_threshold": threshold,
         "failure_analysis": classify_ragas_failures(metric_rows, threshold=threshold),
         "records": metric_rows,

@@ -1,0 +1,281 @@
+user_input,retrieved_contexts,response,reference,faithfulness,answer_relevancy,context_precision,context_recall,answer_correctness
+"A new recommendation ranking model increased revenue by 5% and CTR by 7%, but 7-day retention dropped by 2%. Should we fully launch?","['### User Question  \n> A recommendation model improves CTR but slightly hurts 7-day retention. Should we ship it?  \n### Good Agent Reasoning  \nCTR is often a short-term diagnostic metric. Retention is closer to durable user value.  \nThe agent should ask:  \n- Is CTR the decision metric or only diagnostic?\n- Does the model increase low-quality clicks?\n- Does it create clickbait or shallow engagement?\n- What happens to watch time, satisfaction, hides, reports, and return rate?\n- Is the retention decline statistically and practically meaningful?\n- Does the effect differ by new vs existing users?\n- Is the model changing creator incentives or content diversity?  \nPossible recommendation:  \n- Do not fully launch if the retention decline is meaningful.\n- Consider partial rollout only if the CTR lift is strategically important and retention harm is small, uncertain, or concentrated in a non-core segment.\n- Investigate ranking quality and long-term satisfaction before launch.  \nLikely decision:  \n- `investigate_further` or `do_not_launch`.  \n---', 'Question:\n> A new ad ranking model increases platform revenue by 5%, but advertiser ROI drops by 3%. Should we launch?\nGood reasoning:\nThis is not automatically a win. The model may be extracting more short-term revenue from advertisers while reducing their value. Inspect iROAS, conversion quality, CPC inflation, advertiser retention, small advertiser impression share, user negative feedback, auction concentration, and segment effects.\nLikely decision:\n- `investigate_further` if the ROI decline is material but not fully diagnosed.\n- `do_not_ship` if advertiser ROI decline exceeds tolerance.\n- `limited_rollout` only if ROI harm is within tolerance and long-term advertiser monitoring is defined.\nBad answer:\n> Revenue increased 5%, so launch.', '### User Question  \n> We ran the experiment for two days and 7-day retention looks flat. Can we ignore retention?  \n### Good Agent Answer  \nTelemetry Status: `metric_unreliable` for 7-day retention due to immaturity.  \nA 7-day retention metric cannot be final after two days. The metric should be marked `not_mature_yet`. Fast metrics such as exposure, render success, latency, and early activation may be mature, but retention cannot support a launch decision yet unless the decision is explicitly low risk and retention is monitored post-launch.  \n---', 'Use this playbook when the user asks about recommendation experiments, ranking experiments, feed experiments, search ranking, homepage recommendations, ""For You"" feeds, playlist recommendations, item/product recommendations, creator/content distribution, recommendation model launches, offline vs online recommender evaluation, CTR/watch-time tradeoffs, diversity, novelty, exposure concentration, long-term satisfaction, or whether a recommendation change should ship.  \nThis playbook is especially relevant when:  \n- CTR, watch time, clicks, saves, purchases, or engagement increase;\n- offline ranking metrics improve but online product metrics are unclear;\n- a recommendation model changes candidate generation, ranking, reranking, blending, filtering, or personalization;\n- the change may concentrate exposure among head items, creators, sellers, or content categories;\n- user engagement improves but negative feedback, churn, fatigue, or content quality worsens;\n- the model may exploit clickbait, repeated exposure, position effects, autoplay, or UI changes;\n- historical logs may be biased because the old recommender controlled exposure;\n- ordinary A/B testing may miss long-term retention, satisfaction, ecosystem, or supply-side effects;\n- the user asks whether a recommendation system is ""better"";\n- the user wants to compare offline metrics, online metrics, and launch decisions.  \nDefault reasoning order:  \n1. Identify the recommendation surface and intervention.\n2. Define the durable recommendation objective.\n3. Separate offline, online, decision, guardrail, and ecosystem metrics.\n4', 'Pitfalls:\n\n- optimizing signup completion while lowering activated retention;\n- helping new users while confusing existing users;\n- novelty effect.\n\nRecommended action:\n\n- segment new vs existing users;\n- require early retention readout;\n- consider partial rollout to new users only.\n\n### 11.3 Checkout, Subscription, or Conversion Funnel\n\nExamples:\n\n- checkout UI;\n- pricing presentation;\n- payment flow;\n- subscription trial design.\n\nMetrics:\n\n- decision: net conversion, paid conversion, margin-adjusted revenue;\n- guardrails: refunds, cancellations, chargebacks, support tickets, churn;\n- diagnostics: click-through, step completion, payment retries.\n\nPitfalls:\n\n- increasing short-term conversion through confusing pricing;\n- increasing purchases that later refund;\n- improving trial start but worsening paid conversion.\n\nRecommended action:\n\n- include delayed refund/cancellation readout;\n- protect trust and pricing clarity;\n- use non-inferiority for refunds and support contacts.\n\n### 11.4 Recommendations, Search, Feed, or Ranking\n\nExamples:\n\n- feed ranking model;\n- search ranking;\n- recommendation module;\n- personalization model.\n\nMetrics:\n\n- decision: successful sessions, long-term retention, satisfaction, qualified engagement;\n- guardrails: hides, reports, low-quality exposure, diversity, latency, creator health;\n- diagnostics: CTR, impressions, dwell time, scroll depth.\n\nPitfalls:\n\n- CTR lift from clickbait;\n- engagement lift from low-quality content;\n- content diversity collapse;\n- creator incentive distortion;\n- retention harm hidden by short-term engagement.\n\nRecommended ac']","## Short Answer
+
+No — not enough evidence to fully launch. The revenue and CTR gains are encouraging, but the 7-day retention drop is a warning sign for long-term user value. This should be investigated further before a full rollout.
+
+## Decision Recommendation
+
+`investigate_further`
+
+## Reasoning
+
+For recommendation/ranking changes, CTR is usually a short-term diagnostic metric, while retention is closer to the durable decision metric. The playbook specifically warns that a model can improve CTR while hurting long-term retention, and that this should not be treated as an automatic launch win.
+
+Here, revenue is up 5% and CTR is up 7%, but 7-day retention is down 2%. Without evidence that the retention decline is statistically and practically insignificant, or limited to a non-core segment, this is not enough to justify full launch.
+
+The missing pieces matter:
+- We do not know whether the retention drop is statistically significant.
+- We do not know whether the drop is concentrated in new users vs existing users.
+- We do not know whether the model is increasing low-quality clicks, clickbait behavior, hides/reports, or reducing satisfaction/diversity.
+- We do not have guardrail metrics or long-term follow-up.
+
+Because of that, the observed lift in revenue/CTR should be treated as incomplete evidence, not causal launch evidence for a full rollout.
+
+## Metrics to Check
+
+- 7-day retention significance and practical impact
+- New vs existing user retention split
+- Long-term satisfaction or successful sessions
+- Hides, reports, and other negative feedback
+- Dwell time / qualified engagement, not just CTR
+- Diversity / exposure concentration
+- Revenue quality signals, if applicable
+- Any segment-level effects by content type, user cohort, or surface
+
+## Suggested Next Steps
+
+- Segment the retention impact by new vs existing users.
+- Check whether the CTR lift is coming from lower-quality or more shallow engagement.
+- Review guardrails: hides, reports, satisfaction, diversity, and return rate.
+- If possible, extend the experiment or run a follow-up focused on long-term outcomes.
+- Consider a limited rollout only if the retention harm is shown to be small, uncertain, or isolated to a non-core segment.
+
+## Risks / Caveats
+
+- CTR can rise from clickbait or shallow engagement.
+- Revenue gains may not persist if retention worsens.
+- A small average retention drop can hide a larger decline in an important segment.
+- Without validity checks or statistical outputs, the observed changes should not be over-interpreted.
+
+
+## Policy Validation
+Policy validation confirmed the LLM decision `investigate_further`.
+
+Triggered policies:
+- `critical_guardrail_regression_blocks_full_launch` -> `investigate_further`: A critical guardrail appears to worsen, so a full launch should be blocked until statistical reliability, segment concentration, and mitigation are checked.
+
+## Retrieved Sources
+
+- launch_decision.md
+- recommendation_experiments.md
+- ab_testing.md","The ideal answer should recommend `investigate_further` and clearly explain the decision using: guardrail metric, retention, segment analysis, partial rollout. It should stay grounded in the retrieved playbook context.",0.6481481481481481,0.7669347715436186,0.8041666666465626,0.5,0.4972448442366333
+The treatment group has 30% more users than control in a planned 50/50 experiment. Can we trust the result?,"[""Sample Ratio Mismatch occurs when the observed number of experimental units in each variant differs statistically from the expected assignment ratio.  \nExamples:  \n- Expected 50/50 split, observed 55/45.\n- Expected 90/10 split, observed 87/13.\n- Expected equal split across three arms, observed 30/40/30.\n- Assignment counts are balanced, but exposure counts are 48/52.\n- Assignment counts are balanced globally, but mobile traffic is 60/40.\n- Triggered analysis is 70/30 because the treatment increases trigger probability.  \nSRM is usually detected using a goodness-of-fit test such as Pearson's chi-square test.  \nImportant distinction:  \n- **SRM detection** tells the Agent that the observed ratio is unlikely under the configured assignment rule.\n- **SRM diagnosis** tells the Agent why the ratio is wrong and whether any part of the analysis can still be trusted.  \nDetection without diagnosis is not enough for a responsible launch decision.  \n---"", 'Use `do_not_trust_result` when validity guardrails fail.\nThis applies when there are serious issues such as:\n- sample ratio mismatch;\n- randomization failure;\n- assignment imbalance;\n- unstable assignment;\n- exposure mismatch;\n- treatment/control contamination;\n- missing or asymmetric telemetry;\n- duplicated users or events;\n- post-treatment filtering;\n- bot or spam imbalance;\n- denominator drift;\n- metric instrumentation changes during the experiment;\n- data pipeline changes during the experiment.\nWhen this label is used, the agent should not interpret the measured primary lift or guardrail movement as causal evidence.\nBad:\n> Conversion increased, but SRM exists, so launch carefully.\nBetter:\n> Do not trust result. SRM means treatment and control may not be comparable. Diagnose assignment, exposure logging, eligibility filtering, and missing telemetry, then repair or rerun the experiment.\n---', '### 6.2 During-Experiment Monitoring\n\nMonitor while the test is running:\n\n- SRM;\n- assignment counts;\n- exposure counts;\n- treatment load failure;\n- logging volume;\n- event schema changes;\n- severe latency/crash/error guardrails;\n- bot/spam anomalies;\n- ramp configuration;\n- treatment availability by platform/app version;\n- experiment collisions if interactions are likely.\n\nDuring-experiment monitoring should be used mainly for safety and validity, not opportunistic success declaration.\n\n### 6.3 Post-Experiment Validity\n\nCheck before analysis:\n\n- SRM on assigned population;\n- SRM on triggered/exposed population if triggered analysis is used;\n- exposure consistency across variants;\n- no post-treatment filtering;\n- no differential missingness;\n- no duplicated users or events;\n- no metric logging parity issue;\n- no bot/spam imbalance;\n- no treatment/control contamination;\n- no instrumentation change during the test;\n- no data pipeline change during the test;\n- no sample censoring that differs by variant;\n- invariant metrics are balanced;\n- experiment ran for the planned analysis window.\n\n### 6.4 SRM Rule\n\nIf SRM is detected, the default status is:\n\n> `do_not_trust_result`\n\nDo not interpret the observed treatment lift until the root cause is diagnosed.\n\nPossible SRM root causes:\n\n- randomization bug;\n- ramp misconfiguration;\n- variant self-selection;\n- treatment load failure;\n- bot/spam filtering;\n- triggered analysis bias;\n- logging loss;\n- eligibility mismatch;\n- client-side bucketing issue;\n- app-version-specific bug;\n- exposure opportunity mismatch.\n\n### 6.5 Exposure Consis', 'Guardrails determine whether a product change is safe to ship.  \nThere are two major types of guardrails:  \n1. trust-related guardrails;\n2. organizational guardrails.  \n---  \n### 10.1 Trust-Related Guardrails  \nTrust-related guardrails determine whether the experiment result can be interpreted.  \nExamples:  \n- sample ratio mismatch;\n- assignment imbalance;\n- missing telemetry;\n- duplicated events;\n- inconsistent treatment/control logging;\n- biased triggered analysis;\n- post-treatment filtering;\n- bot or spam imbalance;\n- data pipeline changes during the experiment;\n- metric instrumentation changes during the experiment.  \nIf trust-related guardrails fail, use `do_not_trust_result`.  \nDo not use a broken experiment as causal evidence.  \n---  \n### 10.2 Organizational Guardrails  \nOrganizational guardrails determine whether the product change is safe for the business, users, and ecosystem.  \nExamples:  \n- retention;\n- revenue;\n- latency;\n- crash rate;\n- refunds;\n- complaints;\n- trust/safety violations;\n- advertiser ROI;\n- creator or seller health;\n- marketplace liquidity;\n- content quality;\n- support tickets;\n- user trust.  \nIf organizational guardrails fail, the experiment may still be statistically valid, but the product decision may be `partial_rollout`, `investigate_further`, or `do_not_launch`.  \n---  \n### 10.3 Guardrail Tolerance and Non-Inferiority Logic  \nA guardrail does not always need to improve. Often it needs to not deteriorate beyond an acceptable threshold.  \nFor guardrails, the question is not always:  \n> Did this metric move at all?  \nThe better question is:  ', 'Sample Ratio Mismatch is not merely a count discrepancy. It is a symptom that the experiment data path may be broken.\nPotential SRM causes:\n- randomization bug;\n- eligibility filter differs across variants;\n- assignment event missing in one variant;\n- exposure event logged differently;\n- treatment causes app crash or render failure;\n- bot or spam traffic unevenly assigned;\n- device ID or user ID read differently by variant;\n- post-assignment filtering removes users unevenly;\n- event ingestion fails for one group;\n- analysis query joins drop one variant more often.\nAgent rule:\n> If unresolved assignment SRM exists, do not interpret treatment effects as causal evidence.\nThe measured lift may be directionally interesting for debugging, but it is not a launch signal.\n---']","## Short Answer
+
+No. A 30% larger treatment group than control in a planned 50/50 experiment is a sample ratio mismatch, so the result should not be trusted as causal evidence.
+
+## Decision Recommendation
+`do_not_trust_result`
+
+## Reasoning
+
+The experiment was planned as 50/50, but the observed allocation is materially imbalanced. The playbook says sample ratio mismatch means the observed number of units differs from the expected assignment ratio, and when SRM is detected the default status is `do_not_trust_result`.
+
+This is a trust-related guardrail failure. Per the playbook, when SRM or other validity guardrails fail, we should not interpret the measured lift as causal evidence until the root cause is diagnosed.
+
+## Metrics to Check
+
+- Assigned user counts by variant
+- Exposure counts by variant
+- SRM test on the assigned population
+- Randomization / ramp configuration
+- Eligibility and filtering logic by variant
+- Missing or asymmetric telemetry
+- Treatment load failures or crashes
+- Duplicate users or events
+- Contamination between control and treatment
+- Any instrumentation or data pipeline changes during the test
+
+## Suggested Next Steps
+
+1. Diagnose why treatment has 30% more users than control.
+2. Check assignment logs and experiment configuration for randomization or ramp issues.
+3. Verify exposure and logging parity across variants.
+4. Look for variant-specific filtering, missing telemetry, or treatment-side failures.
+5. Re-run or repair the experiment before using the result for launch decisions.
+
+## Risks / Caveats
+
+- The imbalance may indicate a broken data path, not just a benign count difference.
+- Even if the treatment metric looks better, it should not be treated as causal while SRM is unresolved.
+- Without diagnosis, it is unclear whether any observed lift reflects the product change or an experiment integrity issue.
+
+
+## Policy Validation
+Policy validation confirmed the LLM decision `do_not_trust_result`.
+
+Triggered policies:
+- `experiment_validity_blocks_launch` -> `do_not_trust_result`: Experiment assignment, sample ratio, eligibility, or logging validity is suspect, so metric lift should not be trusted as causal launch evidence.
+
+## Retrieved Sources
+
+- sample_ratio_mismatch.md
+- guardrail_metrics.md
+- ab_testing.md
+- launch_decision.md
+- experiment_telemetry.md","The ideal answer should recommend `do_not_trust_result` and clearly explain the decision using: sample ratio mismatch, randomization, logging, experiment validity. It should stay grounded in the retrieved playbook context.",0.7894736842105263,0.784860177097645,0.99999999998,0.5,0.5029118441547962
+"A feed experiment increased CTR, but conversion rate decreased and revenue per user is flat. Should we launch based on clicks?","['### User Question  \n> CTR increased 12%, but revenue and retention are flat. Is this a good result?  \n### Good Agent Answer  \nTelemetry Status: `metric_unreliable` for CTR.  \nBefore interpreting the CTR lift as user preference, check click event duplication, denominator changes, accidental clicks, UI area shifts, bot traffic, and client retry behavior. If duplicate click logging is variant-specific, CTR should be excluded from launch evidence. Revenue and retention may still be analyzable if their telemetry lineage is clean and mature.  \n---', 'Pitfalls:\n\n- optimizing signup completion while lowering activated retention;\n- helping new users while confusing existing users;\n- novelty effect.\n\nRecommended action:\n\n- segment new vs existing users;\n- require early retention readout;\n- consider partial rollout to new users only.\n\n### 11.3 Checkout, Subscription, or Conversion Funnel\n\nExamples:\n\n- checkout UI;\n- pricing presentation;\n- payment flow;\n- subscription trial design.\n\nMetrics:\n\n- decision: net conversion, paid conversion, margin-adjusted revenue;\n- guardrails: refunds, cancellations, chargebacks, support tickets, churn;\n- diagnostics: click-through, step completion, payment retries.\n\nPitfalls:\n\n- increasing short-term conversion through confusing pricing;\n- increasing purchases that later refund;\n- improving trial start but worsening paid conversion.\n\nRecommended action:\n\n- include delayed refund/cancellation readout;\n- protect trust and pricing clarity;\n- use non-inferiority for refunds and support contacts.\n\n### 11.4 Recommendations, Search, Feed, or Ranking\n\nExamples:\n\n- feed ranking model;\n- search ranking;\n- recommendation module;\n- personalization model.\n\nMetrics:\n\n- decision: successful sessions, long-term retention, satisfaction, qualified engagement;\n- guardrails: hides, reports, low-quality exposure, diversity, latency, creator health;\n- diagnostics: CTR, impressions, dwell time, scroll depth.\n\nPitfalls:\n\n- CTR lift from clickbait;\n- engagement lift from low-quality content;\n- content diversity collapse;\n- creator incentive distortion;\n- retention harm hidden by short-term engagement.\n\nRecommended ac', 'User question:\n> Card CTR increased 11%, but checkout conversion dropped 8%. Should we treat this as a guardrail issue?\nGood answer pattern:\n> Guardrail verdict: `hard_breach_block` or `soft_breach_review` depending threshold. CTR is likely diagnostic. A lower-funnel conversion decline suggests the design may create low-quality clicks or mislead users. Do not treat CTR lift as a clean win until conversion quality is repaired.\n---', 'Question:\n> A new ad format increases CTR by 12%, but conversion rate after click is flat and refund rate rises. Is this good?\nGood reasoning:\nCTR is diagnostic. This may indicate accidental or misleading clicks. Inspect post-click quality, bounce rate, refund-adjusted value, complaints, and placement changes.\nLikely decision:\n- `investigate_further` or `do_not_ship`.', '### User Question  \n> A recommendation model improves CTR but slightly hurts 7-day retention. Should we ship it?  \n### Good Agent Reasoning  \nCTR is often a short-term diagnostic metric. Retention is closer to durable user value.  \nThe agent should ask:  \n- Is CTR the decision metric or only diagnostic?\n- Does the model increase low-quality clicks?\n- Does it create clickbait or shallow engagement?\n- What happens to watch time, satisfaction, hides, reports, and return rate?\n- Is the retention decline statistically and practically meaningful?\n- Does the effect differ by new vs existing users?\n- Is the model changing creator incentives or content diversity?  \nPossible recommendation:  \n- Do not fully launch if the retention decline is meaningful.\n- Consider partial rollout only if the CTR lift is strategically important and retention harm is small, uncertain, or concentrated in a non-core segment.\n- Investigate ranking quality and long-term satisfaction before launch.  \nLikely decision:  \n- `investigate_further` or `do_not_launch`.  \n---']","## Short Answer
+
+No — do not launch based on clicks alone. CTR is a diagnostic signal, while the decrease in conversion rate and flat revenue per user mean the click lift is not showing up as durable business value.
+
+## Decision Recommendation
+`investigate_further`
+
+## Reasoning
+
+For feed/recommendation experiments, the playbook treats CTR as a diagnostic metric, not the primary decision metric. The more important signals are successful sessions, long-term retention, satisfaction, and qualified engagement.
+
+Here, CTR increased, but conversion rate decreased and revenue per user is flat. That pattern is consistent with low-quality or misleading clicks rather than a true improvement in user value. The retrieved examples specifically warn that CTR gains can be misleading when downstream conversion quality worsens.
+
+No statistical outputs were provided, so there is no evidence here that the CTR lift is robust, causal, or worth trading off against weaker downstream outcomes.
+
+## Metrics to Check
+
+- Conversion rate by segment and funnel step
+- Revenue per user with confidence intervals
+- Retention / return rate
+- Dwell time and scroll depth
+- Hides, reports, and other negative feedback
+- Qualified engagement, not just clicks
+- Whether CTR logging or denominator logic changed
+- New vs existing user split
+
+## Suggested Next Steps
+
+- Verify CTR telemetry for duplicate clicks, bot traffic, retry behavior, and denominator changes.
+- Inspect the post-click funnel to see where conversion is dropping.
+- Segment results by new vs existing users.
+- Check whether the feed change is increasing shallow or accidental clicks.
+- Review retention and satisfaction before considering launch.
+- If conversion harm is real, prioritize fixing quality before any rollout.
+
+## Risks / Caveats
+
+- CTR may be inflated by logging artifacts or low-quality clicks.
+- Flat revenue per user suggests the click lift may not translate into business impact.
+- Without validity checks or statistical outputs, the observed changes should not be treated as launch-ready causal evidence.
+- If the conversion decline is meaningful, launching on clicks could degrade user trust and long-term engagement.
+
+
+## Policy Validation
+Policy validation confirmed the LLM decision `investigate_further`.
+
+Triggered policies:
+- `engagement_lift_with_quality_drop_requires_investigation` -> `investigate_further`: Engagement or CTR gains are insufficient when conversion quality, advertiser value, revenue, ROAS, or downstream user value worsens.
+
+## Retrieved Sources
+
+- experiment_telemetry.md
+- ab_testing.md
+- guardrail_metrics.md
+- ads_experiments.md
+- launch_decision.md","The ideal answer should recommend `investigate_further` and clearly explain the decision using: CTR, conversion, quality, investigate. It should stay grounded in the retrieved playbook context.",0.8529411764705882,0.6809977211341527,0.99999999998,0.5,0.5233012739165804
+"A recommendation experiment shows revenue increased, conversion improved, retention stable, complaints stable, and no guardrail regression. What is the launch decision?","['User question:\n> Search successful-session rate increased. D1 retention, p95 latency, and error rate look flat. Are guardrails okay?\nGood answer pattern:\n> Guardrail verdict: `guardrails_pass`. Validity checks pass. Successful-session rate improved by a meaningful amount. D1 retention is within tolerance, p95 latency increased only slightly below the soft threshold, and error rate is flat. No key segment shows reliable harm. Proceed to launch decision review with standard monitoring.\n---', 'Use `launch` when the evidence is strong enough for broad release.\nA full launch is appropriate when:\n- experiment validity checks pass;\n- the decision metric improves by a practically meaningful amount;\n- the effect is aligned with the product goal;\n- key guardrails are stable or within acceptable deterioration tolerance;\n- no strategically important segment is harmed;\n- long-term risk is low or well-monitored;\n- the feature is operationally ready;\n- rollback plans and monitoring are defined.\nDo not recommend full launch only because one metric is statistically significant.\nBad reasoning:\n> Conversion increased with p < 0.05, so we should launch.\nBetter reasoning:\n> Conversion increased by a practically meaningful amount, the confidence interval excludes material downside, SRM and logging checks passed, revenue and retention guardrails are stable, no key segment is harmed, and the change is reversible. Recommend launch with standard post-launch monitoring.\n---', 'Bad:\n\n> The primary metric was flat, but another metric improved, so the test succeeded.\n\nBetter:\n\n> Treat the new metric as exploratory and run a follow-up test if it represents a better hypothesis.\n\n### 15.6 Segment Overfitting\n\nBad:\n\n> One small subgroup improved, so launch there.\n\nBetter:\n\n> Check sample size, multiple testing, strategic relevance, and replication.\n\n### 15.7 Ignoring Reversibility\n\nBad:\n\n> Apply the same evidence threshold to a button copy change and a pricing policy change.\n\nBetter:\n\n> Higher-risk and less reversible decisions require stronger evidence and stricter guardrails.\n\n### 15.8 Confusing Observational Evidence with Experiment Evidence\n\nBad:\n\n> Users exposed to the feature retained better, so the feature caused retention.\n\nBetter:\n\n> Exposure may be endogenous. Use randomized assignment, DiD, regression discontinuity, synthetic control, or another causal design.\n\n### 15.9 Treating Short-Term Engagement as Durable Value\n\nBad:\n\n> Watch time increased, so the product improved.\n\nBetter:\n\n> Check whether watch time is qualified, retention is stable, satisfaction is stable, and content quality is not harmed.\n\n### 15.10 Ignoring Interference\n\nBad:\n\n> Randomize sellers individually and assume buyer outcomes are independent.\n\nBetter:\n\n> Marketplaces may violate no-interference assumptions. Consider cluster or geo randomization.\n\n---\n\n## 16. Agent Output Template: A/B Test Readout\n\nUse this structure when answering an A/B test interpretation question.\n\n```text\nExperiment status:\n[ready_to_read / do_not_trust_result / inconclusive / positive_aligned / neg', 'Agent should ask:\n- Was new-user improvement the intended hypothesis?\n- Is existing-user decline on a decision metric or guardrail?\n- Are existing users high-value or strategically important?\n- Can the feature be shown only to new users?\n- Is the existing-user decline temporary adaptation or persistent harm?\n- Are retention, complaints, support tickets, and revenue stable?\nLikely decision:\n- `targeted_rollout` to new users if evidence is strong and existing users can be excluded.\n- `investigate_further` if the existing-user decline may be temporary or noisy.\n- `do_not_launch` if existing-user harm is material and targeting is infeasible.', ""Optimize durable recommendation value, not clicks.  \nA recommendation experiment is successful only if it improves the user's ability to discover valuable content, products, people, or actions while preserving trust, diversity, satisfaction, and supply-side incentives.  \nThe Agent should not treat the following as sufficient evidence of success:  \n- CTR increased;\n- impressions increased;\n- watch time increased;\n- session length increased;\n- offline NDCG improved;\n- model AUC improved;\n- top-K recall improved;\n- purchases increased without refund/margin/repeat checks;\n- engagement increased in a short experiment.  \nA good recommendation decision depends on:  \n- whether the metric movement is trustworthy;\n- whether the decision metric is aligned with durable user value;\n- whether short-term engagement is healthy or exploitative;\n- whether users are more satisfied, not merely more reactive;\n- whether recommendations remain diverse, novel, and useful;\n- whether the model avoids popularity collapse and feedback loops;\n- whether important user segments are harmed;\n- whether creators, sellers, advertisers, or content providers are harmed;\n- whether exposure concentration remains acceptable;\n- whether long-term retention and return behavior are protected;\n- whether the evaluation design handles exposure bias and interference.  \nBad reasoning:  \n> CTR increased by 4%, so the recommendation model is better.  \nBetter reasoning:  \n> CTR increased, but the Agent must check whether the clicks are high-quality, whether downstream completion, satisfaction, negative feedback, retention, di""]","## Short Answer
+
+`launch` is the recommended decision, assuming the experiment validity checks passed and the revenue/conversion gains are practically meaningful.
+
+## Decision Recommendation
+`launch`
+
+## Reasoning
+
+The playbook says to use `launch` when the experiment is valid, the decision metric improves meaningfully, guardrails are stable or within acceptable tolerance, and no important segment is harmed. Here, the user states that revenue increased, conversion improved, retention is stable, complaints are stable, and there is no guardrail regression. That matches the launch pattern in the framework.
+
+For a recommendation experiment specifically, the playbook also emphasizes durable user value and protecting trust, satisfaction, diversity, and long-term retention. The stated stability in retention and complaints supports that the lift is not obviously coming at the expense of user experience.
+
+## Metrics to Check
+
+- Experiment validity checks: SRM, logging, assignment integrity
+- Revenue lift: magnitude and whether it is practically meaningful
+- Conversion lift: confirm it aligns with the product goal
+- Retention: confirm stability over the relevant horizon
+- Complaints: confirm no increase in user dissatisfaction
+- Guardrails: verify no regression in any defined guardrail metric
+- Key segments: check for harm in strategically important cohorts
+- Long-term risk: confirm monitoring and rollback readiness
+
+## Suggested Next Steps
+
+- Proceed with launch if validity checks are clean and the revenue/conversion gains are meaningful.
+- Keep standard post-launch monitoring in place.
+- Review key segments and long-term retention after rollout.
+
+## Risks / Caveats
+
+- If SRM, logging, or assignment checks failed, the observed lift should not be treated as causal launch evidence.
+- The prompt does not provide the size of the revenue/conversion lift, so “practically meaningful” cannot be independently verified here.
+- No segment-level results were provided, so hidden harm in an important cohort cannot be ruled out from the prompt alone.
+
+
+## Policy Validation
+Policy validation confirmed the LLM decision `launch`.
+
+Triggered policies:
+- `clean_win_supports_launch` -> `launch`: Primary metrics improved while key guardrails and validity checks appear stable, so launch is reasonable with monitoring.
+
+## Retrieved Sources
+
+- `guardrail_metrics.md`
+- `launch_decision.md`
+- `ab_testing.md`
+- `recommendation_experiments.md`","The ideal answer should recommend `launch` and clearly explain the decision using: launch, guardrails, monitoring. It should stay grounded in the retrieved playbook context.",0.6595744680851063,0.5132932764012298,0.94999999997625,0.5,0.44391273739646914
+"Overall revenue improved, but high-value users had lower retention and more complaints. Should this ship to everyone?","['Guardrails should be evaluated both overall and by pre-registered segments.  \nRequired segment cuts depend on the product, but common cuts include:  \n- new vs existing users;\n- high-value vs low-value users;\n- power users vs casual users;\n- paid vs free users;\n- creators vs consumers;\n- buyers vs sellers;\n- advertisers vs users;\n- geography;\n- language;\n- platform;\n- device class;\n- acquisition channel;\n- tenure;\n- content category;\n- risk group.  \nThe agent should distinguish:  \n- reliable segment harm;\n- noisy segment movement;\n- multiple-testing artifact;\n- strategically important harm;\n- protected or policy-sensitive harm.  \nA segment breach should not be ignored just because the aggregate is positive.  \nThe agent should also avoid overreacting to a tiny, underpowered segment cut.  \n---', 'Averages can hide harm.  \nThe agent should check whether treatment effects differ across:  \n- new vs existing users;\n- high-value vs low-value users;\n- power users vs casual users;\n- paid vs free users;\n- creators vs consumers;\n- buyers vs sellers;\n- advertisers vs users;\n- geographies;\n- platforms;\n- acquisition channels;\n- content categories;\n- user intent groups;\n- safety-sensitive groups;\n- risk groups.  \nA launch may be appropriate for one segment and harmful for another.  \nUse `partial_rollout` when:  \n- the feature clearly benefits one segment;\n- the harmed segment is strategically important;\n- the average effect is positive but distribution is uneven;\n- the feature should be restricted until more evidence is collected.  \nExample:  \n> If a feature improves new-user activation but hurts long-term power-user retention, full launch is risky. A better decision may be targeted rollout for new users while monitoring long-term retention and satisfaction.  \nThe agent should avoid saying “average treatment effect is positive, so launch” without checking segment heterogeneity.  \nThe agent should also avoid overreacting to noisy segment results. Segment findings should be interpreted with attention to:  \n- sample size;\n- multiple testing;\n- whether segments were pre-specified;\n- whether the segment is strategically important;\n- whether the effect is large enough to matter.  \n---', 'This playbook defines how an Agent should reason about segment analysis in product experiments, marketplace experiments, ads experiments, policy analysis, and launch decisions.  \nIt is designed for an evaluation-driven Agentic RAG system. The goal is not to make the Agent slice every experiment by every possible user attribute. The goal is to make the Agent behave like a senior data scientist who can identify heterogeneous treatment effects, protect strategically important groups from hidden harm, avoid false discoveries, and translate segment evidence into responsible rollout decisions.  \nSegment analysis should make launch decisions safer and more precise, not noisier and more cherry-picked.  \nA good segment analysis balances two risks:  \n1. **Average-effect blindness**: the overall experiment result hides meaningful benefit or harm in important segments.\n2. **Segment p-hacking**: the analyst searches many segments after seeing the result and over-interprets noisy or false-positive patterns.  \nThe Agent should not say “segment A is significant, so launch there” unless the segment result is valid, powered, decision-relevant, and consistent with the product hypothesis.  \n---', 'Question:\n> Should we show more ads?\nPrimary metrics:\n- long-term revenue per user;\n- user-satisfaction-adjusted RPM;\n- incremental revenue after user-learning adjustment.\nGuardrails:\n- retention;\n- ad hides/reports;\n- session abandonment;\n- task success;\n- ad fatigue;\n- latency;\n- long-term CTR;\n- user complaints.\nDecision logic:\n- Do not ship based only on short-term RPM.\n- Require long-term holdout or strong user-learning proxy.\n- If revenue rises but high-value user retention falls beyond tolerance, do not ship.\n- If short-term revenue is positive and user guardrails are stable, consider limited rollout with long-term holdout.', '### 8.1 Segment Scan Rules\n\nThe agent should:\n\n1. Start with pre-specified segments.\n2. Add strategic segments relevant to product risk.\n3. Check sample size and uncertainty.\n4. Distinguish exploratory findings from confirmatory findings.\n5. Avoid broad launch if a protected or strategic segment is materially harmed.\n6. Avoid overreacting to tiny noisy subgroups.\n7. Recommend targeted rollout if benefit is segment-specific and harm can be avoided.\n\n### 8.2 Simpson’s Paradox Warning\n\nThe agent should check whether the aggregate effect differs from segment-level effects.\n\nExample:\n\n- overall conversion improves;\n- mobile conversion worsens;\n- desktop conversion improves strongly;\n- mobile is the strategic growth surface.\n\nAverages are not enough.\n\n### 8.2.1 Automated Paradox Detection\n\nThe Agent is required to automatically flag ""Directional Flip"":\n* **Rule**: If the aggregate effect is `positive` but a strategic segment (e.g., Mobile Users, New Users) shows a statistically significant `negative` effect, the Agent must downgrade the status to `segment_specific` and block broad launch.\n\n### 8.3 Segment Decision Patterns\n\n| Pattern | Interpretation | Action |\n|---|---|---|\n| Broad positive, no segment harm | Strong evidence | Launch or launch with monitoring |\n| Positive only in target segment | Targeted value | Partial rollout to target segment |\n| Average positive, strategic segment harmed | Hidden risk | Partial rollout or investigate further |\n| Average flat, one strategic segment strongly positive | Potential opportunity | Segment-specific experiment |\n| Many noisy segment']","## Short Answer
+
+No — not to everyone. The overall revenue gain is encouraging, but the reported decline in high-value user retention plus more complaints is a meaningful segment-level harm, and high-value users are strategically important.
+
+## Decision Recommendation
+`partial_rollout`
+
+## Reasoning
+
+The playbooks say averages can hide harm, and segment analysis should be checked for strategically important groups like high-value users. They also say a positive overall effect is not enough for broad launch when an important segment is harmed.
+
+Here, the evidence points to:
+- overall revenue improved;
+- high-value users had lower retention;
+- complaints increased.
+
+That pattern fits a case where the feature may be beneficial overall but unevenly harmful in an important segment. The playbooks recommend `partial_rollout` when the average effect is positive but the harmed segment is strategically important, or when the feature should be restricted until more evidence is collected.
+
+Because no statistical outputs were provided, I cannot assess whether the high-value-user harm is noisy, underpowered, or robust. But absent evidence that the segment harm is spurious, shipping to everyone would be risky.
+
+## Metrics to Check
+
+- High-value user retention, compared with control
+- Complaint rate, especially among high-value users
+- Overall revenue per user and revenue by segment
+- Retention and complaints for other key segments:
+  - new vs existing users
+  - power users vs casual users
+  - paid vs free users
+- Sample size and uncertainty for the high-value segment
+- Whether the segment cuts were pre-specified
+
+## Suggested Next Steps
+
+- Restrict rollout to the segment(s) showing clear benefit, if identifiable.
+- Investigate why high-value users are retaining less and complaining more.
+- Continue monitoring revenue, retention, and complaints during a limited rollout.
+- Validate whether the high-value-user effect is consistent across time, platform, or acquisition channel.
+- If possible, collect more evidence before broadening exposure.
+
+## Risks / Caveats
+
+- The high-value-user decline may be noisy if the segment is small or underpowered.
+- If the segment analysis was exploratory rather than pre-specified, the result could be a multiple-testing artifact.
+- No validity checks, SRM checks, or statistical outputs were provided, so causal confidence is limited.
+- If complaints reflect a safety-sensitive or policy-sensitive issue, the rollout should be treated even more cautiously.
+
+
+## Policy Validation
+Policy validation confirmed the LLM decision `partial_rollout`.
+
+Triggered policies:
+- `important_segment_harm_blocks_full_launch` -> `partial_rollout`: An overall win may hide harm to an important segment, so full launch should be blocked until segment risk is isolated or mitigated.
+- `critical_guardrail_regression_blocks_full_launch` -> `investigate_further`: A critical guardrail appears to worsen, so a full launch should be blocked until statistical reliability, segment concentration, and mitigation are checked.
+
+## Retrieved Sources
+
+- guardrail_metrics.md
+- launch_decision.md
+- segment_analysis.md
+- ab_testing.md","The ideal answer should recommend `partial_rollout` and clearly explain the decision using: segment analysis, high-value, partial rollout. It should stay grounded in the retrieved playbook context.",0.7391304347826086,0.7791806810443879,0.99999999998,0.5,0.2717982769136798
