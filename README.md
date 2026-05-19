@@ -30,26 +30,44 @@ Build -> Log -> Evaluate -> Diagnose -> Improve -> Re-run
 
 ## System Flow
 
-```mermaid
-flowchart LR
-    A["Input"] --> B["Agent Controller"]
-    B --> C["Task Router"]
-    C --> D{"Need CSV tools?"}
-    D -- "Yes" --> E["Stats Tools"]
-    D -- "No" --> F["Retriever"]
-    E --> G["Evidence Store"]
-    F --> G
-    G --> H{"Enough evidence?"}
-    H -- "No" --> B
-    H -- "Yes" --> I["LLM Memo"]
-    I --> J["Policy Guardrails"]
-    J --> K["Final Memo"]
-    K --> L["Trace Log"]
-    L --> M["Eval Metrics"]
-    M --> N["Failure Analysis"]
-    N --> O["Improve System"]
-    O -.-> F
+```text
+User input: question and optional CSV
+        |
+        v
+Agent controller
+        |
+        +--> Task router
+        |    Decide whether the request is knowledge-only, CSV analysis, or mixed.
+        |
+        +--> Tool planner
+        |    Choose allowed tools: retrieval, SRM check, lift calculation, segment analysis.
+        |
+        +--> Evidence collection
+        |    Retrieve playbook chunks and optionally run CSV diagnostics.
+        |
+        +--> Evidence sufficiency check
+        |    If evidence is weak, retry retrieval, run another tool, or ask for missing information.
+        |
+        +--> LLM launch memo
+        |    Generate a structured recommendation using the collected evidence.
+        |
+        +--> Policy guardrails
+        |    Apply hard constraints such as SRM failure, guardrail regression, and non-random rollout.
+        |
+        v
+Final memo + trace log + evaluation metrics
 ```
+
+| Stage | Responsibility | Current status |
+| --- | --- | --- |
+| Task router | Classify the user request and decide whether CSV tools are needed. | Rule-based now; planned LLM planner upgrade. |
+| Tool planner | Select from allowed tools instead of letting the model take arbitrary actions. | Rule-based now; planned structured LLM plan. |
+| Retrieval | Search selected playbooks for relevant experimentation guidance. | Hybrid BM25 + vector-style retrieval. |
+| CSV diagnostics | Compute experiment facts such as SRM, lift, guardrail movement, and segment risk. | Deterministic statistical tools. |
+| Evidence sufficiency | Decide whether retrieved/contextual evidence is enough to answer safely. | Planned upgrade. |
+| Memo generation | Produce the launch recommendation memo. | OpenAI-compatible LLM. |
+| Policy validation | Block unsafe launch decisions under explicit hard constraints. | Deterministic policy validator. |
+| Evaluation loop | Measure retrieval quality, answer quality, policy corrections, and failure modes. | Custom eval + Ragas + failure inspection. |
 
 EvalRAG is designed as a bounded product analytics agent. The agent does not freely execute arbitrary actions. Instead, it operates inside a controlled workflow: classify the task, decide whether data tools are needed, retrieve playbook evidence, check whether evidence is sufficient, generate a launch memo, validate the decision, log the trace, and evaluate the result.
 
