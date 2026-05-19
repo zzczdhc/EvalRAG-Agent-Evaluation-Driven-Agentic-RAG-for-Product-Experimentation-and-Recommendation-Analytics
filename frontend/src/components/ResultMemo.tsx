@@ -38,16 +38,19 @@ const diagnosticStyle: Record<DiagnosticResult["status"], string> = {
   risk: "bg-rose-50 text-rose-700 ring-rose-200",
 };
 
-function MetricBar({ label, value }: { label: string; value: number }) {
-  const percent = Math.round(value * 100);
+function MetricBar({ label, value }: { label: string; value?: number | null }) {
+  const percent = typeof value === "number" && Number.isFinite(value) ? Math.round(value * 100) : null;
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-xs font-semibold text-graphite">
         <span>{label}</span>
-        <span>{percent}%</span>
+        <span>{percent === null ? "N/A" : `${percent}%`}</span>
       </div>
       <div className="h-2 rounded-full bg-slate-200/80">
-        <div className="h-2 rounded-full bg-ink" style={{ width: `${percent}%` }} />
+        <div
+          className={cn("h-2 rounded-full", percent === null ? "bg-slate-300/70" : "bg-ink")}
+          style={{ width: percent === null ? "14%" : `${Math.max(4, Math.min(percent, 100))}%` }}
+        />
       </div>
     </div>
   );
@@ -68,31 +71,22 @@ function Section({ title, icon: Icon, children }: { title: string; icon: typeof 
 }
 
 function ThinkingPanel() {
-  const steps = ["Plan", "Retrieve", "Diagnose", "Validate", "Draft"];
-
   return (
-    <section className="glass-panel liquid-edge rounded-[34px] p-8">
-      <div className="mx-auto max-w-2xl text-center">
-        <div className="mx-auto mb-5 h-2 w-48 rounded-full bg-white/70 thinking-shimmer shadow-sm" />
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/60 px-3 py-1.5 shadow-sm">
-          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-graphite">Agent thinking</span>
-          <span className="flex items-center gap-1">
-            <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-graphite" />
-            <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-graphite" />
-            <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-graphite" />
-          </span>
+    <section className="glass-panel liquid-edge rounded-[34px] p-5 sm:p-6">
+      <div className="flex items-center gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-white/80 bg-white/72 shadow-sm">
+          <span className="h-4 w-4 rounded-full bg-ink thinking-shimmer" />
         </div>
-        <h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">Preparing an evidence-grounded launch memo</h2>
-        <p className="mt-2 text-sm leading-6 text-graphite">
-          Planning the workflow, retrieving playbook context, checking diagnostics, and validating the recommendation.
-        </p>
-        <div className="mt-5 grid gap-2 sm:grid-cols-5">
-          {steps.map((label, index) => (
-            <div key={label} className="thinking-step rounded-2xl border border-white/80 bg-white/58 p-3 text-sm font-semibold text-graphite shadow-sm">
-              <span className="relative z-10 block text-[11px] font-semibold text-slate-400">{String(index + 1).padStart(2, "0")}</span>
-              <span className="relative z-10 mt-1 block">{label}</span>
-            </div>
-          ))}
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+            <span>Agent is thinking</span>
+            <span className="flex items-center gap-1">
+              <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-graphite" />
+              <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-graphite" />
+              <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-graphite" />
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-graphite">Planning · retrieving · validating</p>
         </div>
       </div>
     </section>
@@ -135,7 +129,7 @@ export function ResultMemo({ result, isLoading = false }: ResultMemoProps) {
         <div className="rounded-[22px] border border-white/80 bg-white/66 p-4 shadow-sm lg:w-[300px]">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
             <Gauge size={16} />
-            Evaluation
+            Live diagnostics
           </div>
           <div className="space-y-3">
             <MetricBar label="Faithfulness" value={result.evaluation.faithfulness} />
@@ -143,6 +137,9 @@ export function ResultMemo({ result, isLoading = false }: ResultMemoProps) {
             <MetricBar label="Answer relevance" value={result.evaluation.answerRelevance} />
             <MetricBar label="Decision confidence" value={result.evaluation.decisionConfidence} />
           </div>
+          <p className="mt-3 text-[11px] leading-5 text-graphite">
+            Full Ragas scores require saved eval records with ground truth; live questions only show metrics returned by the backend.
+          </p>
         </div>
       </div>
 

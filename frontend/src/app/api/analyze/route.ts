@@ -27,6 +27,10 @@ function asNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function optionalNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function mapDecision(decision?: string): Recommendation {
   switch (decision) {
     case "launch":
@@ -119,6 +123,8 @@ function diagnosticsFromToolSummary(toolSummary?: Record<string, unknown>): Diag
 function mapBackendResponse(data: BackendResponse): AnalysisResult {
   const answer = data.answer ?? "";
   const evaluation = data.evaluation ?? {};
+  const trace = data.trace ?? {};
+  const decisionJson = trace.decision_json as Record<string, unknown> | undefined;
   const context = retrievedContext(data.retrieved_chunks ?? []);
   const summary = extractSection(answer, "Short Answer") || mockResult.summary;
   const evidence = listFromSection(extractSection(answer, "Reasoning"));
@@ -137,10 +143,10 @@ function mapBackendResponse(data: BackendResponse): AnalysisResult {
     retrievedContext: context.length ? context : mockResult.retrievedContext,
     diagnostics: diagnosticsFromToolSummary(data.tool_summary),
     evaluation: {
-      faithfulness: evaluation.memo_decision_consistent === false ? 0.72 : 0.9,
-      contextPrecision: asNumber(evaluation.source_precision_at_k ?? evaluation.source_match_rate, 0.82),
-      answerRelevance: asNumber(evaluation.concept_coverage, 0.8),
-      decisionConfidence: Boolean(data.policy_validation?.policy_override) ? 0.74 : 0.84,
+      faithfulness: optionalNumber(evaluation.faithfulness),
+      contextPrecision: optionalNumber(evaluation.source_precision_at_k ?? evaluation.source_match_rate),
+      answerRelevance: optionalNumber(evaluation.concept_coverage),
+      decisionConfidence: optionalNumber(decisionJson?.confidence),
     },
     trace: mapTrace(data),
   };

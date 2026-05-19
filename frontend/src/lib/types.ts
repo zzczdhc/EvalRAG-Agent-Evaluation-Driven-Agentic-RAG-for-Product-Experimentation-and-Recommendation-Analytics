@@ -27,10 +27,10 @@ export type DiagnosticResult = {
 };
 
 export type EvaluationMetrics = {
-  faithfulness: number;
-  contextPrecision: number;
-  answerRelevance: number;
-  decisionConfidence: number;
+  faithfulness: number | null;
+  contextPrecision: number | null;
+  answerRelevance: number | null;
+  decisionConfidence: number | null;
 };
 
 export type AnalysisTrace = {
