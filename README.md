@@ -31,28 +31,27 @@ Build -> Log -> Evaluate -> Diagnose -> Improve -> Re-run
 ## System Flow
 
 ```mermaid
-flowchart TD
-    A["User input<br/>question or CSV"] --> B["Route task<br/>rule-based"]
-    B --> C["Plan tools<br/>rule-based"]
-    C --> D{"CSV needed?"}
-    D -- "Yes" --> E["Run stats tools<br/>SRM, lift, segments"]
-    D -- "No" --> F["Retrieve playbook<br/>hybrid search"]
-    E --> F
-    F --> G["Build evidence<br/>facts + chunks"]
-    G --> H["Generate memo<br/>LLM"]
-    H --> I["Validate policy<br/>deterministic rules"]
-    I --> J{"Policy conflict?"}
-    J -- "Yes" --> K["Revise final<br/>decision"]
-    J -- "No" --> L["Final memo"]
-    K --> L
-    L --> M["Log trace"]
-    M --> N["Evaluate<br/>custom + Ragas"]
-    N --> O["Inspect failures"]
-    O --> P["Improve<br/>playbook/retrieval/prompt"]
-    P --> F
+flowchart LR
+    A["Input"] --> B["Agent Controller"]
+    B --> C["Task Router"]
+    C --> D{"Need CSV tools?"}
+    D -- "Yes" --> E["Stats Tools"]
+    D -- "No" --> F["Retriever"]
+    E --> G["Evidence Store"]
+    F --> G
+    G --> H{"Enough evidence?"}
+    H -- "No" --> B
+    H -- "Yes" --> I["LLM Memo"]
+    I --> J["Policy Guardrails"]
+    J --> K["Final Memo"]
+    K --> L["Trace Log"]
+    L --> M["Eval Metrics"]
+    M --> N["Failure Analysis"]
+    N --> O["Improve System"]
+    O -.-> F
 ```
 
-The workflow is agentic because it routes tasks, chooses from available tools, retrieves external knowledge, combines tool outputs with retrieved evidence, generates a structured decision memo, validates the decision, and evaluates the resulting trace. It is bounded because the graph controls the allowed steps, the tool set is fixed, and hard launch constraints are checked by deterministic policy rules rather than left entirely to the LLM.
+EvalRAG is designed as a bounded product analytics agent. The agent does not freely execute arbitrary actions. Instead, it operates inside a controlled workflow: classify the task, decide whether data tools are needed, retrieve playbook evidence, check whether evidence is sufficient, generate a launch memo, validate the decision, log the trace, and evaluate the result.
 
 In the current implementation:
 
@@ -63,7 +62,9 @@ In the current implementation:
 - final decision safety is checked by the policy validator;
 - quality is measured by custom eval, Ragas, and failure inspection.
 
-This is best described as a bounded AI agent or agentic RAG workflow, not a fully autonomous open-ended agent.
+The near-term agent upgrade is to make the controller more adaptive while keeping the workflow bounded: the LLM should produce a structured plan, choose from allowed tools, inspect retrieved evidence, retry retrieval when evidence is weak, verify user claims against CSV outputs, and ask for missing information when the available evidence is insufficient.
+
+That distinction is intentional. Product launch analysis should not be a fully open-ended autonomous agent. It should be an auditable agentic workflow with constrained tools, explicit evidence, deterministic guardrails, and measurable failure modes.
 
 ## What This Project Demonstrates
 
