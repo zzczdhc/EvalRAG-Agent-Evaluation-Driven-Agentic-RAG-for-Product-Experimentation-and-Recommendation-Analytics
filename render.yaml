@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: evalrag-agent-api
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: EVALRAG_GENERATOR
+        value: openai_compatible
+      - key: EVALRAG_LLM_BASE_URL
+        value: https://api.openai.com/v1
+      - key: EVALRAG_LLM_MODEL
+        value: gpt-5.4-mini
+      - key: EVALRAG_LLM_TOKEN_PARAMETER
+        value: max_completion_tokens
+      - key: EVALRAG_LLM_MAX_TOKENS
+        value: "1400"
+      - key: EVALRAG_LLM_TIMEOUT_SECONDS
+        value: "90"
+      - key: EVALRAG_CHUNK_SEMANTIC_ENABLE
+        value: "false"
+      - key: EVALRAG_TOP_K
+        value: "5"
+      - key: EVALRAG_HYBRID_ALPHA
+        value: "0.35"

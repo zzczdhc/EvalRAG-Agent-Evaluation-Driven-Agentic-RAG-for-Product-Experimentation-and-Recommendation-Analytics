@@ -38,6 +38,45 @@ const diagnosticStyle: Record<DiagnosticResult["status"], string> = {
   risk: "bg-rose-50 text-rose-700 ring-rose-200",
 };
 
+const highlightTerms = [
+  "sample ratio mismatch",
+  "confidence interval",
+  "guardrail",
+  "retention",
+  "revenue",
+  "conversion",
+  "complaint",
+  "segment",
+  "launch",
+  "rollout",
+  "randomized",
+  "treatment",
+  "control",
+  "metric",
+  "SRM",
+  "CTR",
+  "CVR",
+  "DiD",
+  "p-value",
+];
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function HighlightedSnippet({ text }: { text: string }) {
+  const pattern = new RegExp(`(${highlightTerms.map(escapeRegex).join("|")})`, "gi");
+  return text.split(pattern).map((part, index) => {
+    const isMatch = highlightTerms.some((term) => term.toLowerCase() === part.toLowerCase());
+    if (!isMatch) return <span key={`${part}-${index}`}>{part}</span>;
+    return (
+      <mark key={`${part}-${index}`} className="rounded-md bg-amber-100/80 px-1 py-0.5 text-amber-900 ring-1 ring-amber-200/70">
+        {part}
+      </mark>
+    );
+  });
+}
+
 function MetricBar({ label, value }: { label: string; value?: number | null }) {
   const percent = typeof value === "number" && Number.isFinite(value) ? Math.round(value * 100) : null;
   return (
@@ -185,17 +224,44 @@ export function ResultMemo({ result, isLoading = false }: ResultMemoProps) {
         </Section>
 
         <Section title="Retrieved context" icon={FileText}>
-          <div className="flex flex-wrap gap-2">
-            {result.retrievedContext.map((context) => (
-              <details key={`${context.source}-${context.score}`} className="group soft-reveal w-full rounded-2xl border border-white/80 bg-white/64 p-2 transition open:bg-white/82 sm:w-auto">
-                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full px-2 py-1 text-sm font-semibold text-ink">
-                  <span>{context.source}</span>
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-graphite ring-1 ring-slate-200">
-                    {context.score.toFixed(2)}
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-xs leading-5 text-graphite">Collapsed by default. Open a source to inspect the retrieved chunk.</p>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-graphite ring-1 ring-slate-200">
+              {result.retrievedContext.length} chunks
+            </span>
+          </div>
+          <div className="space-y-2">
+            {result.retrievedContext.map((context, index) => (
+              <details
+                key={`${context.source}-${context.score}-${index}`}
+                className="group rounded-2xl border border-white/80 bg-white/64 p-2 shadow-sm transition duration-200 open:bg-white/86 open:shadow-md"
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-sm font-semibold text-ink">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-ink text-[11px] font-semibold text-white">
+                      {index + 1}
+                    </span>
+                    <span className="truncate">{context.source}</span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-graphite ring-1 ring-slate-200">
+                      score {context.score.toFixed(2)}
+                    </span>
+                    <span className="text-graphite transition group-open:rotate-90">›</span>
                   </span>
                 </summary>
-                <div className="soft-reveal mt-2 rounded-xl border border-slate-100 bg-white/76 p-3 sm:w-[420px]">
-                  <p className="text-sm leading-6 text-graphite">{context.snippet}</p>
+                <div className="soft-reveal mt-2 rounded-xl border border-slate-100 bg-white/76 p-3">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-slate-50 px-2 py-1 font-mono text-[11px] text-graphite ring-1 ring-slate-200">
+                      retrieved_chunk_{String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100">
+                      source-grounding
+                    </span>
+                  </div>
+                  <p className="text-sm leading-6 text-graphite">
+                    <HighlightedSnippet text={context.snippet} />
+                  </p>
                 </div>
               </details>
             ))}

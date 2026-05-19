@@ -282,6 +282,45 @@ The current mapping is:
 - CSV present: call FastAPI `POST /analyze` with multipart form data;
 - map FastAPI fields such as `answer`, `decision`, `retrieved_chunks`, `tool_summary`, `policy_validation`, `evaluation`, and `trace` into the frontend `AnalysisResult` type.
 
+## Deployment
+
+Recommended prototype deployment:
+
+```text
+Browser
+  -> Vercel-hosted Next.js frontend
+  -> /api/analyze proxy route
+  -> Render-hosted FastAPI backend
+  -> OpenAI-compatible LLM API
+```
+
+This split keeps the OpenAI API key on the server side. Do not expose `OPENAI_API_KEY` or `EVALRAG_LLM_API_KEY` in browser code or `NEXT_PUBLIC_*` variables.
+
+Backend deployment:
+
+- Use the repository root as the backend service.
+- Use the included `Dockerfile`.
+- `render.yaml` defines a Render web service blueprint named `evalrag-agent-api`.
+- Set `OPENAI_API_KEY` as a secret environment variable in the hosting dashboard.
+- The backend health check path is `/health`.
+
+Frontend deployment:
+
+- Use `frontend/` as the Vercel project root directory.
+- Build command: `npm run build`.
+- Install command: `npm install`.
+- Set `EVALRAG_BACKEND_URL` to the deployed FastAPI URL, for example:
+
+```text
+EVALRAG_BACKEND_URL=https://evalrag-agent-api.onrender.com
+```
+
+Important behavior:
+
+- If `EVALRAG_BACKEND_URL` is missing or the backend is unavailable, the frontend route falls back to mock data for UI development.
+- If the backend is live and configured with your OpenAI key, public users consume your OpenAI quota.
+- For a public demo, add rate limiting, authentication, or a demo-only usage cap before sharing broadly.
+
 ## LLM Configuration
 
 Primary hosted model defaults:
