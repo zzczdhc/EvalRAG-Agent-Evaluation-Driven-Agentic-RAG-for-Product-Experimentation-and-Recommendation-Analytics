@@ -236,16 +236,46 @@ Open:
 http://localhost:3000
 ```
 
-Current frontend status:
+To run the full local product loop, start both services:
 
-- `frontend/src/app/api/analyze/route.ts` returns mock analysis data.
-- The UI does not yet call the real FastAPI pipeline.
-- CSV upload currently records filename and size in the browser, but does not upload file contents to the backend.
+```bash
+# terminal 1: Python backend
+uvicorn app.main:app --reload
+
+# terminal 2: Next.js frontend
+cd frontend
+npm run dev
+```
+
+The frontend proxies analysis requests through:
+
+```text
+frontend/src/app/api/analyze/route.ts
+```
+
+Current frontend/backend status:
+
+- question-only requests call FastAPI `POST /ask` when the backend is running;
+- CSV-backed requests call FastAPI `POST /analyze` with multipart form data;
+- FastAPI responses are mapped into the frontend `AnalysisResult` shape;
+- if the Python backend is unavailable, the UI falls back to mock data so frontend development still works;
 - Playbook/corpus selection uses placeholder corpus metadata.
 
-Backend integration should happen in `frontend/src/app/api/analyze/route.ts`. The intended mapping is:
+The backend URL defaults to:
 
-- no CSV: call FastAPI `POST /ask` with the question and selected corpus metadata;
+```text
+http://127.0.0.1:8000
+```
+
+Override it with:
+
+```bash
+EVALRAG_BACKEND_URL=http://127.0.0.1:8000 npm run dev
+```
+
+The current mapping is:
+
+- no CSV: call FastAPI `POST /ask` with the question;
 - CSV present: call FastAPI `POST /analyze` with multipart form data;
 - map FastAPI fields such as `answer`, `decision`, `retrieved_chunks`, `tool_summary`, `policy_validation`, and `evaluation` into the frontend `AnalysisResult` type.
 

@@ -41,14 +41,14 @@ export function InputPanel({ onResult }: InputPanelProps) {
     if (!canSubmit) return;
     setIsLoading(true);
     try {
+      const formData = new FormData();
+      formData.append("question", question);
+      formData.append("selectedCorpusIds", JSON.stringify(selectedCorpusIds));
+      if (file) formData.append("csvFile", file, file.name);
+
       const response = await fetch("/api/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question,
-          selectedCorpusIds,
-          csvFileName: file?.name,
-        }),
+        body: formData,
       });
       const result = (await response.json()) as AnalysisResult;
       onResult(result);
