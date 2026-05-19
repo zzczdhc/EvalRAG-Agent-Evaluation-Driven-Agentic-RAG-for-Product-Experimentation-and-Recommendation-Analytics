@@ -6,15 +6,27 @@ import { InputPanel } from "@/components/InputPanel";
 import { ResultMemo } from "@/components/ResultMemo";
 import { Sidebar } from "@/components/Sidebar";
 import { WorkflowVisualizer } from "@/components/WorkflowVisualizer";
+import { corpora } from "@/lib/mock-data";
 import type { AnalysisResult } from "@/lib/types";
 
 export function AnalyticsWorkspace() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [selectedCorpusIds, setSelectedCorpusIds] = useState<string[]>(corpora.map((corpus) => corpus.id));
+
+  function toggleCorpus(id: string) {
+    setSelectedCorpusIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  }
 
   return (
     <main className="min-h-screen text-ink">
       <div className="flex min-h-screen">
-        <Sidebar />
+        <Sidebar
+          selectedCorpusIds={selectedCorpusIds}
+          onToggleCorpus={toggleCorpus}
+          onNewAnalysis={() => setResult(null)}
+        />
         <section className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
           <div className="mx-auto flex max-w-[1480px] flex-col gap-5">
             <header className="glass-panel liquid-edge rounded-[34px] px-5 py-5 sm:px-7 sm:py-6">
@@ -53,7 +65,7 @@ export function AnalyticsWorkspace() {
 
             <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="space-y-5">
-                <InputPanel onResult={setResult} />
+                <InputPanel selectedCorpusIds={selectedCorpusIds} onResult={setResult} />
                 <ResultMemo result={result} />
               </div>
               <aside className="space-y-5">
@@ -67,9 +79,9 @@ export function AnalyticsWorkspace() {
                       <span className="font-mono text-ink"> /api/analyze</span>.
                     </p>
                     <p>
-                      Later, that route can proxy to FastAPI <span className="font-mono text-ink">/ask</span> for
-                      question-only analysis and <span className="font-mono text-ink">/analyze</span> for CSV-backed
-                      analysis.
+                      That route proxies to FastAPI <span className="font-mono text-ink">/ask</span> for question-only
+                      analysis and <span className="font-mono text-ink">/analyze</span> for CSV-backed analysis when the
+                      backend is running.
                     </p>
                   </div>
                 </section>

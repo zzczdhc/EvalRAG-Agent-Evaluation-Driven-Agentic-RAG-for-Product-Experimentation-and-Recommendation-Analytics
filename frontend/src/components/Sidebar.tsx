@@ -1,4 +1,6 @@
-import { BookOpen, FilePlus2, History, Plus, Sparkles } from "lucide-react";
+"use client";
+
+import { BookOpen, Check, History, Plus, Sparkles } from "lucide-react";
 import { corpora, historyItems } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
@@ -9,7 +11,13 @@ const recommendationTone = {
   "Needs More Investigation": "bg-amber-50 text-amber-700 ring-amber-200",
 };
 
-export function Sidebar() {
+type SidebarProps = {
+  selectedCorpusIds: string[];
+  onToggleCorpus: (id: string) => void;
+  onNewAnalysis: () => void;
+};
+
+export function Sidebar({ selectedCorpusIds, onToggleCorpus, onNewAnalysis }: SidebarProps) {
   return (
     <aside className="hidden h-screen w-[310px] shrink-0 border-r border-white/70 bg-white/56 px-4 py-5 shadow-soft backdrop-blur-glass lg:block">
       <div className="flex h-full flex-col gap-6">
@@ -23,7 +31,11 @@ export function Sidebar() {
               <p className="text-xs leading-4 text-graphite">Evaluation-Driven Product Analytics Agent</p>
             </div>
           </div>
-          <button className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-ink px-4 py-3 text-sm font-medium text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-black">
+          <button
+            type="button"
+            onClick={onNewAnalysis}
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-ink px-4 py-3 text-sm font-medium text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-black"
+          >
             <Plus size={17} />
             New analysis
           </button>
@@ -61,25 +73,48 @@ export function Sidebar() {
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-graphite">
               <BookOpen size={14} />
-              Playbooks
+              Retrieval scope
             </div>
-            <button className="rounded-full border border-white/80 bg-white/70 p-1.5 text-graphite shadow-sm transition hover:text-ink">
-              <FilePlus2 size={14} />
-            </button>
+            <span className="rounded-full border border-white/80 bg-white/70 px-2 py-1 text-[11px] font-semibold text-graphite shadow-sm">
+              {selectedCorpusIds.length}/{corpora.length}
+            </span>
           </div>
+          <p className="px-1 text-xs leading-5 text-graphite">
+            Default is all scopes. Uncheck one only when you want retrieval to ignore that document group.
+          </p>
           <div className="space-y-2">
-            {corpora.map((corpus) => (
-              <div key={corpus.id} className="rounded-2xl border border-white/70 bg-white/48 p-3 shadow-sm">
+            {corpora.map((corpus) => {
+              const selected = selectedCorpusIds.includes(corpus.id);
+              return (
+              <button
+                key={corpus.id}
+                type="button"
+                onClick={() => onToggleCorpus(corpus.id)}
+                className={cn(
+                  "w-full rounded-2xl border p-3 text-left shadow-sm transition",
+                  selected
+                    ? "border-blue-200 bg-blueglass text-ink"
+                    : "border-white/70 bg-white/48 text-graphite hover:bg-white/82",
+                )}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-sm font-semibold leading-5 text-ink">{corpus.name}</h3>
-                  <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-200">
-                    {corpus.status}
+                  <span
+                    className={cn(
+                      "grid h-5 w-5 shrink-0 place-items-center rounded-full ring-1",
+                      selected ? "bg-ink text-white ring-ink" : "bg-white text-transparent ring-slate-200",
+                    )}
+                  >
+                    <Check size={12} />
                   </span>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-graphite">{corpus.description}</p>
-                <p className="mt-2 text-[11px] font-medium text-graphite">{corpus.documentCount} docs</p>
-              </div>
-            ))}
+                <p className="mt-2 text-[11px] font-medium text-graphite">{corpus.documentCount} mapped files</p>
+                <p className="mt-1 line-clamp-2 font-mono text-[10px] leading-4 text-slate-500">
+                  {corpus.sources.join(", ")}
+                </p>
+              </button>
+            );})}
           </div>
         </section>
       </div>

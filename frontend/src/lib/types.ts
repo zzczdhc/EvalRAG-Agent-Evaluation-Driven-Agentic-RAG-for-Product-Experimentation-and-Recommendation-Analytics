@@ -9,6 +9,7 @@ export type Corpus = {
   name: string;
   description: string;
   documentCount: number;
+  sources: string[];
   status: "ready" | "draft";
 };
 
