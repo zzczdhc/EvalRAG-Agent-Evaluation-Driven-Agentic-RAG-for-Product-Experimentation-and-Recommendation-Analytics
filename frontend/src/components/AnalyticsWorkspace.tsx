@@ -59,13 +59,19 @@ export function AnalyticsWorkspace() {
               <aside className="space-y-5">
                 <WorkflowVisualizer />
                 <section className="glass-panel liquid-edge rounded-[28px] p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-graphite">Integration notes</p>
-                  <h2 className="mt-2 text-lg font-semibold text-ink">Backend contract</h2>
-                  <p className="mt-3 text-sm leading-7 text-graphite">
-                    The current UI calls a mocked Next.js route at <span className="font-mono text-ink">/api/analyze</span>.
-                    Replace that route with calls into the FastAPI <span className="font-mono text-ink">/ask</span> and
-                    <span className="font-mono text-ink"> /analyze</span> endpoints when wiring the real pipeline.
-                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-graphite">Integration Path</p>
+                  <h2 className="mt-2 text-lg font-semibold text-ink">FastAPI wiring</h2>
+                  <div className="mt-3 space-y-3 text-sm leading-6 text-graphite">
+                    <p>
+                      The frontend is isolated from the Python pipeline behind one route:
+                      <span className="font-mono text-ink"> /api/analyze</span>.
+                    </p>
+                    <p>
+                      Later, that route can proxy to FastAPI <span className="font-mono text-ink">/ask</span> for
+                      question-only analysis and <span className="font-mono text-ink">/analyze</span> for CSV-backed
+                      analysis.
+                    </p>
+                  </div>
                 </section>
               </aside>
             </div>
