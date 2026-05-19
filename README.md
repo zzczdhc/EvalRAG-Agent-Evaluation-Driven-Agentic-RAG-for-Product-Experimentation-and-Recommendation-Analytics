@@ -2,97 +2,75 @@
 
 Evaluation-driven agentic RAG for product experimentation analytics.
 
-EvalRAG Agent is a prototype experiment-analysis copilot that turns product experiment questions and synthetic A/B test CSVs into structured, source-grounded launch memos. It retrieves from a domain playbook, calls an OpenAI-compatible LLM to synthesize the answer and decision label, logs retrieval traces, evaluates quality, and can run lightweight statistical tools for experiment diagnostics.
+EvalRAG Agent turns product experimentation questions and synthetic A/B test CSVs into structured, source-grounded launch memos. It retrieves from a product experimentation playbook, optionally runs statistical tools, generates a decision memo with an OpenAI-compatible LLM, validates the decision against explicit policy constraints, logs the trace, and evaluates the result with both custom metrics and Ragas.
 
-The project is intentionally not just another "chatbot over docs." The main idea is to make an AI-assisted launch recommendation system inspectable, measurable, and improvable.
+The project goal is not to build a generic document chatbot. The goal is to demonstrate an inspectable experimentation analyst workflow where retrieval, reasoning, policy checks, and answer quality can be measured and improved.
 
-## Motivation
+## Core Idea
 
-A general-purpose LLM can often answer a question like:
+A general-purpose LLM can often produce a plausible answer to a question like:
 
 ```text
 Revenue increased, but retention dropped. Should we launch?
 ```
 
-But in real product experimentation work, a plausible answer is not enough. The system should answer based on the team's playbook, the available experiment data, and explicit evidence. It should also make failures visible:
+That is not enough for product experimentation work. The system should answer using a defined playbook, explicit experiment evidence, and auditable decision rules. It should also expose failures:
 
-- Did retrieval find the right playbook sections?
-- Did the answer use retrieved evidence instead of inventing unsupported rules?
-- Did the statistical tools calculate experiment facts correctly?
-- Did the final launch recommendation match the scenario?
-- Can we inspect the retrieved chunks, scores, decision label, latency, and model used?
+- Did retrieval find the relevant playbook sections?
+- Did the answer rely on retrieved context and scenario facts?
+- Did the system call the right statistical tools for CSV-based analysis?
+- Did the LLM decision, policy decision, and final decision agree?
+- Did evaluation metrics improve after a playbook, chunking, retrieval, or prompt change?
 
-EvalRAG turns RAG development from vibe-based prompting into:
+EvalRAG follows this loop:
 
 ```text
-Build -> Log -> Evaluate -> Diagnose -> Optimize
+Build -> Log -> Evaluate -> Diagnose -> Improve -> Re-run
 ```
 
-## Current Scope
+## System Flow
 
-Current focus: product experimentation analytics.
+```mermaid
+flowchart TD
+    A[User question or CSV + question] --> B[Task classifier]
+    B --> C[Tool planner]
+    C --> D{Needs data analysis?}
+    D -- Yes --> E[CSV validation + stats tools]
+    D -- No --> F[Playbook retrieval]
+    E --> F[Playbook retrieval]
+    F --> G[Evidence bundle]
+    G --> H[LLM decision + structured memo]
+    H --> I[Policy validator]
+    I --> J{Policy conflict?}
+    J -- Yes --> K[Revise or override final decision]
+    J -- No --> L[Final launch memo]
+    K --> L
+    L --> M[Telemetry logs]
+    M --> N[Custom eval + Ragas eval]
+    N --> O[Failure inspection]
+    O --> P[Playbook / retrieval / prompt iteration]
+    P --> F
+```
 
-The system supports scenarios such as:
-
-- Revenue improved, but retention declined.
-- CTR improved, but conversion quality dropped.
-- Sample ratio mismatch makes an experiment untrustworthy.
-- A launch looks good overall but harms an important segment.
-- A rollout was non-randomized and should use DiD or another quasi-experimental design.
-- A CSV experiment needs SRM checks, metric lifts, significance approximations, and segment summaries.
-
-This is still a prototype, not a production launch-decision system. The goal is to demonstrate a measurable architecture that can be iterated toward a more mature human-in-the-loop experimentation copilot.
+The graph is bounded by design. It is not an open-ended autonomous agent. It classifies the task, plans tools, retrieves playbook evidence, creates a structured decision, validates hard policy constraints, and emits an auditable memo.
 
 ## What This Project Demonstrates
 
-- RAG over a product experimentation playbook instead of a generic PDF chatbot.
-- Hybrid retrieval using BM25 plus hashed-vector scoring.
-- A bounded LangGraph experimentation analyst workflow instead of a single linear pipeline.
-- Structured evidence-first decision flow with explicit `task_type`, `required_tools`, `tool_summary`, `evidence_bundle`, and `decision_json`.
-- LLM-generated launch memos with explicit, parseable decision labels.
-- Hybrid decision tracing with `llm_decision`, `policy_decision`, and `final_decision`.
-- Hosted OpenAI-compatible generation by default, with local Ollama `qwen3:8b` fallback.
-- Telemetry for query, retrieved chunks, scores, latency, answer, model, and backend.
-- Evaluation harness for retrieval quality, concept coverage, decision accuracy, latency, and graph-level workflow checks.
-- Ragas evaluation for faithfulness, answer relevancy, and context precision over saved eval records.
-- Retrieval-only eval mode for debugging search quality without LLM cost.
-- CSV analysis tools for SRM checks, metric lifts, approximate tests, and segment analysis.
+- Domain-specific RAG over a product experimentation playbook.
+- Hybrid retrieval using BM25 plus dependency-light vector scoring.
+- A LangGraph analyst workflow with explicit state transitions.
+- OpenAI-compatible LLM generation with parseable decision labels.
+- Local Ollama fallback support for development.
+- Statistical tools for synthetic experiment CSVs: SRM, metric lift, approximate tests, and segment analysis.
+- Policy validation for hard experimentation constraints such as SRM failure, guardrail regression, non-random rollout, and segment harm.
+- Trace logging for question, retrieved chunks, scores, tool outputs, decisions, latency, model, and backend.
+- Custom evaluation for retrieval quality, concept coverage, decision accuracy, policy corrections, and latency.
+- Ragas evaluation for faithfulness, answer relevancy, context precision, context recall, and answer correctness.
+- Failure inspection reports that join Ragas scores with the actual question, answer, reference, expected sources, and retrieved chunks.
 
-## Architecture
+## Decision Labels
 
-```text
-START
-  -> intake_node
-  -> classify_task_node
-  -> tool_planner_node
-  -> tool_executor_node
-  -> retrieval_node
-  -> evidence_bundle_node
-  -> evidence_checker_node
-  -> if evidence is insufficient and retry_count < max_retries:
-       replan_node -> tool_executor_node / retrieval_node
-     else:
-       decision_node
-  -> policy_validator_node
-  -> if validator finds conflict and retry_count < max_retries:
-       revise_decision_node -> policy_validator_node
-     else:
-       memo_generator_node
-  -> eval_node
-  -> END
-```
-
-The workflow is intentionally bounded and inspectable. It is not an open-ended chatbot agent. The graph first classifies the task, plans multiple tools when needed, executes those tools, retrieves relevant playbook rules, builds an evidence bundle, decides on a structured recommendation, validates it against hard experimentation policies, generates a human-readable memo, and evaluates the full trace.
-
-This means the system can support mixed workflows such as:
-
-- question only -> retrieve playbook -> make a structured launch decision
-- CSV + question -> validate data + run SRM/lift/tests/segments + retrieve playbook -> combine evidence -> decide
-- non-random rollout -> avoid simple A/B causal claims and route toward quasi-experiment reasoning
-
-At v0.1, task classification and tool planning are rule-based. The LLM is used for memo generation, while the graph keeps decision-making explicit through `decision_json` and policy validation.
-
-Allowed decision labels:
+EvalRAG uses a constrained decision vocabulary:
 
 - `launch`
 - `do_not_launch`
@@ -101,49 +79,69 @@ Allowed decision labels:
 - `do_not_trust_result`
 - `use_did_or_quasi_experiment`
 
+The LLM proposes a decision, the policy validator checks it, and the final memo records the resulting decision trace.
+
+## Example Scenarios
+
+EvalRAG is designed for product experimentation questions such as:
+
+- Revenue improved, but 7-day retention declined.
+- CTR increased, but conversion quality or purchase conversion dropped.
+- Treatment/control split shows sample ratio mismatch.
+- A feature wins overall but harms high-value users or a strategic segment.
+- A marketplace ranking model concentrates exposure and may harm supply health.
+- A rollout was non-randomized and should use DiD or another quasi-experimental design.
+- A CSV experiment needs SRM checks, lift calculations, significance checks, and segment summaries before launch.
+
 ## Repository Layout
 
 ```text
 app/
   main.py                    FastAPI app
-  rag_pipeline.py            Backward-compatible pipeline interface over the graph workflow
+  rag_pipeline.py            Pipeline interface over the graph workflow
+  config.py                  Environment-based settings
   graph/
     state.py                 Shared graph state schema
     nodes.py                 Graph node implementations
     workflow.py              LangGraph workflow definition and routing
-  policy_validator.py        Hard-constraint policy checks for hybrid decisions
-  llm_generator.py           OpenAI-compatible chat-completions client and prompt builder
-  retrieval.py               BM25 + hashed-vector hybrid retriever
+  policy_validator.py        Hard-constraint policy validation
+  llm_generator.py           OpenAI-compatible generation and prompt builder
+  retrieval.py               BM25 + vector hybrid retrieval
   chunking.py                Markdown playbook chunking and index persistence
   telemetry.py               JSONL logging
   tools/
-    experiment_stats.py      SRM, lift, tests, segment analysis
+    experiment_stats.py      SRM, lifts, tests, segment analysis
     data_validation.py       CSV validation and metric inference
+
 data/
-  playbook/                  Product experimentation playbook
-  eval/eval_questions.jsonl  Scenario-based evaluation set
-  synthetic/                 Synthetic experiment CSVs
+  playbook/                  Product experimentation playbook files
+  eval/eval_questions.jsonl  Golden/scenario evaluation set
+  synthetic/                 Synthetic experiment CSV scenarios
+
 scripts/
   build_index.py             Rebuild playbook chunk index
   query.py                   Ask one question from CLI
-  analyze_csv.py             Analyze one synthetic experiment CSV
-  run_eval.py                Run scenario evaluation
+  analyze_csv.py             Analyze one CSV with tools + RAG
+  run_eval.py                Run custom scenario evaluation
   run_ragas_eval.py          Run Ragas metrics over saved eval records
+  inspect_ragas_failures.py  Join Ragas failures with answers and retrieved chunks
   compare_retrievers.py      Compare retrieval settings without LLM calls
   generate_synthetic_data.py Generate synthetic CSV scenarios
+
 docs/
   HOSTED_OPENAI_API.md       Hosted OpenAI setup
   LOCAL_LLM.md               Ollama / LM Studio setup
-  DECISION_EVALUATION.md     LLM/policy/final decision tracing
+  DECISION_EVALUATION.md     LLM, policy, and final decision tracing
   EVALUATION_DRIVEN_RAG.md   Eval loop, Ragas, failure analysis, LangSmith notes
-logs/                        Runtime logs and saved eval records, ignored by git
+
+logs/                        Runtime logs and eval outputs, ignored by git
 tests/                       Unit tests
 ```
 
 ## Setup
 
 ```bash
-cd ~/Documents/EvalRAG-Agent
+cd /Users/alex_z/Documents/EvalRAG-Agent
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
@@ -172,15 +170,13 @@ Analyze a synthetic CSV:
 python scripts/analyze_csv.py data/synthetic/guardrail_failure.csv --show-tools
 ```
 
-The CLI now passes raw CSV text into the graph workflow. Tool selection and execution happen inside the bounded analyst graph rather than as a separate pre-step.
-
 Run the FastAPI app:
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-Then open:
+Open:
 
 ```text
 http://127.0.0.1:8000/docs
@@ -197,87 +193,133 @@ EVALRAG_LLM_MODEL=gpt-5.4-mini
 EVALRAG_LLM_TOKEN_PARAMETER=max_completion_tokens
 ```
 
-Fallback local model defaults:
+Optional local fallback defaults:
 
 ```text
+EVALRAG_LLM_FALLBACK_ENABLED=true
 EVALRAG_FALLBACK_LLM_BASE_URL=http://localhost:11434/v1
 EVALRAG_FALLBACK_LLM_MODEL=qwen3:8b
 EVALRAG_FALLBACK_LLM_TOKEN_PARAMETER=max_tokens
 ```
 
-If the hosted call fails and Ollama is running with `qwen3:8b`, EvalRAG records:
+If the hosted call fails and local fallback is available, metadata records `generator_backend: local_llm_fallback`. For evaluation runs intended to compare model quality, confirm the saved records show `generator_backend: openai_compatible` and no `generator_error`.
 
-```text
-generator_backend: local_llm_fallback
-model: qwen3:8b
-generator_error: <primary hosted model error>
-```
+See:
 
-See `docs/HOSTED_OPENAI_API.md`, `docs/LOCAL_LLM.md`, `docs/DECISION_EVALUATION.md`, and `docs/EVALUATION_DRIVEN_RAG.md` for more details.
+- `docs/HOSTED_OPENAI_API.md`
+- `docs/LOCAL_LLM.md`
+- `docs/DECISION_EVALUATION.md`
+- `docs/EVALUATION_DRIVEN_RAG.md`
 
-## Evaluation
+## Evaluation Workflow
 
-The scenario dataset lives at:
+The evaluation set is stored in:
 
 ```text
 data/eval/eval_questions.jsonl
 ```
 
-Each scenario can specify:
+Each row can include:
 
-- `expected_sources`: playbook files the retriever should find
-- `expected_concepts`: concepts that should appear in the answer
-- `expected_decision`: expected launch recommendation label
+- `question`: scenario prompt
+- `expected_sources`: playbook files expected in retrieval
+- `expected_concepts`: concepts expected in the answer
+- `expected_decision`: expected final decision label
+- optional reference/ground-truth fields for deeper judge evaluation
 
-Run full 25-question LLM evaluation:
+### 1. Rebuild Index After Playbook Edits
+
+```bash
+python scripts/build_index.py
+```
+
+### 2. Run Custom Eval
 
 ```bash
 python scripts/run_eval.py --save-records logs/openai_eval_full.json
 ```
 
-Run retrieval-only evaluation without calling an LLM:
+This records retrieval traces, generated answers, decision labels, policy validation, and custom metrics.
+
+Retrieval-only mode avoids LLM cost:
 
 ```bash
 python scripts/run_eval.py --retrieval-only
 ```
 
-Run stricter concept coverage with an LLM judge fallback. The judge is only called for still-missing concepts when deterministic coverage is below the failure threshold:
+Strict concept judging can be enabled for missing concepts:
 
 ```bash
 python scripts/run_eval.py --concept-judge --save-records logs/openai_eval_judge_full.json
 ```
 
-Run Ragas evaluation over saved records. This computes faithfulness, answer relevancy, context precision, context recall, and answer correctness. It may call judge LLMs and embeddings through Ragas:
+### 3. Run Ragas Eval
 
 ```bash
-python scripts/run_ragas_eval.py --records logs/openai_eval_full.json --output logs/ragas_eval_full.json --csv-output logs/ragas_eval_full.csv
+python scripts/run_ragas_eval.py \
+  --records logs/openai_eval_full.json \
+  --output logs/ragas_eval_full.json \
+  --csv-output logs/ragas_eval_full.csv \
+  --ragas-model gpt-5.4-mini
 ```
 
-Prepare the Ragas input dataset without spending judge tokens:
+Prepare the Ragas dataset without judge calls:
 
 ```bash
-python scripts/run_ragas_eval.py --records logs/openai_eval_full.json --prepare-only --output logs/ragas_input_full.json
+python scripts/run_ragas_eval.py \
+  --records logs/openai_eval_full.json \
+  --prepare-only \
+  --output logs/ragas_input_full.json
 ```
 
-Compare retrieval settings without LLM cost:
+### 4. Inspect Failure Cases
+
+```bash
+python scripts/inspect_ragas_failures.py \
+  --records logs/openai_eval_full.json \
+  --ragas-report logs/ragas_eval_full.json \
+  --output logs/failure_analysis_full.md
+```
+
+The report groups failures by hypothesis and decision category, then prints each case with:
+
+- question
+- Ragas weak metrics
+- expected and matched sources
+- answer preview
+- reference text
+- retrieved chunk previews
+- a likely diagnosis
+
+### 5. Compare Retrieval Settings
 
 ```bash
 python scripts/compare_retrievers.py
 ```
 
-Current retrieval metrics include:
+You can also run controlled experiments by changing `--top-k`:
 
-- `source_hit_at_k`: at least one expected source appeared in top-k
+```bash
+python scripts/run_eval.py --top-k 8 --save-records logs/openai_eval_top8.json
+```
+
+Then rerun Ragas and compare metric deltas.
+
+## Metrics
+
+Custom retrieval metrics:
+
+- `source_hit_at_k`: at least one expected source appears in top-k
 - `source_match_rate`: fraction of expected sources retrieved
-- `all_expected_sources_found_rate`: whether all expected sources were found
-- `top1_source_match_rate`: whether the top source was expected
-- `source_precision_at_k`: fraction of retrieved sources that were expected
-- `mean_reciprocal_rank`: how early the first expected source appeared
+- `all_expected_sources_found_rate`: whether all expected sources are found
+- `top1_source_match_rate`: whether the top source is expected
+- `source_precision_at_k`: fraction of retrieved sources that are expected
+- `mean_reciprocal_rank`: how early the first expected source appears
 
-Answer metrics include:
+Custom answer and decision metrics:
 
-- `concept_coverage`: deterministic exact/semantic coverage, optionally upgraded by strict LLM judging for missing concepts
-- `deterministic_concept_coverage`: score before any LLM judge fallback
+- `concept_coverage`
+- `deterministic_concept_coverage`
 - `llm_decision_accuracy`
 - `policy_decision_accuracy_when_triggered`
 - `final_decision_accuracy`
@@ -285,13 +327,15 @@ Answer metrics include:
 - `policy_regression_rate`
 - `avg_latency_seconds`
 
-Ragas metrics include:
+Ragas metrics:
 
-- `faithfulness`: whether the answer is grounded in retrieved contexts
-- `answer_relevancy`: whether the answer directly addresses the user question
-- `context_precision`: whether retrieved contexts are useful and ranked well
+- `faithfulness`: whether the answer is supported by retrieved contexts
+- `answer_relevancy`: whether the answer directly addresses the question
+- `context_precision`: whether retrieved contexts are useful and well ranked
 - `context_recall`: whether retrieved contexts cover the reference answer
-- `answer_correctness`: whether the answer matches the ground-truth/reference answer
+- `answer_correctness`: whether the answer matches the reference answer
+
+Important caveat: product experimentation memos often combine user-provided scenario facts with retrieved playbook guidance. Ragas is useful as a general RAG health check, but low scores should be inspected case by case before treating them as system failures.
 
 ## Example Output Shape
 
@@ -310,12 +354,11 @@ Ragas metrics include:
 ## Risks / Caveats
 
 ## Policy Validation
-Optional section when a hard policy confirms or overrides the LLM proposal.
 
 ## Retrieved Sources
 ```
 
-The internal workflow also records structured intermediate objects such as:
+Internally, each run also records structured fields such as:
 
 - `task_type`
 - `required_tools`
@@ -324,27 +367,21 @@ The internal workflow also records structured intermediate objects such as:
 - `evidence_sufficiency`
 - `decision_json`
 - `policy_validation`
+- `llm_decision`
+- `policy_decision`
+- `final_decision`
 
-## Current Limitations
+## Engineering Boundaries
 
-- The playbook is still being expanded and refined.
-- The LangGraph workflow is intentionally bounded and rule-heavy in v0.1; task classification, replanning, and evidence sufficiency checks are still deterministic baselines.
-- Concept coverage uses deterministic exact, stemmed token-overlap, and fuzzy phrase-window matching by default; optional `--concept-judge` adds a strict LLM judge only for unresolved gaps.
-- The policy validator is conservative and deterministic; it now records structured policy IDs, priorities, and blocking/supportive findings, but future work should externalize these rules into a configurable policy layer.
-- The statistical tools are lightweight approximations intended for synthetic demo data, not production experimentation infrastructure.
-- Retrieval uses a dependency-light hashed-vector method, not a production embedding database or reranker.
-- Semantic chunking support exists, but local offline environments may still rely on simpler fallback chunking depending on model availability.
+EvalRAG is designed as a rigorous applied AI project, not as production experimentation infrastructure. Current boundaries are explicit:
 
-## Recommended Next Steps
-
-1. Expand the product experimentation playbook with reliable public sources and original summaries.
-2. Rebuild the index after playbook edits with `python scripts/build_index.py`.
-3. Run retrieval-only eval to diagnose source coverage before spending LLM tokens.
-4. Run LLM eval and inspect saved records for decision and grounding failures.
-5. Expand targeted eval cases for each policy validator rule and inspect `policy_correction_rate` / `policy_regression_rate`.
-6. Expand the golden dataset with ground-truth answers and categories.
-7. Add a pre/post comparison script for custom eval and Ragas reports.
+- The playbook is domain-authored and should keep improving as the evaluation set grows.
+- The policy validator is deterministic and conservative; future versions can externalize policy rules into a configurable policy layer.
+- Statistical tools are lightweight and intended for synthetic or portfolio-scale examples.
+- Retrieval uses dependency-light local indexing rather than a managed vector database or production reranker.
+- Ragas metrics require careful interpretation because launch memos are judgment tasks, not pure extractive QA.
+- LangSmith is optional; local JSON logs and reports are sufficient for the current evaluation loop.
 
 ## Project Identity
 
-This project is not a simple chatbot over markdown files. It is a bounded, evaluation-driven experimentation analyst workflow for product analytics, designed to make AI-assisted launch recommendations grounded, inspectable, measurable, and iteratively improvable.
+EvalRAG Agent is an evaluation-driven experimentation analyst workflow. It combines retrieval, statistical tools, structured LLM output, policy validation, telemetry, and failure analysis to make AI-assisted product launch recommendations measurable and debuggable.
