@@ -1,0 +1,11 @@
+import { clsx, type ClassValue } from "clsx";
+
+export function cn(...inputs: ClassValue[]) {
+  return clsx(inputs);
+}
+
+export function formatFileSize(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}

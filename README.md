@@ -194,6 +194,43 @@ Open:
 http://127.0.0.1:8000/docs
 ```
 
+## Frontend UI
+
+The product UI lives in:
+
+```text
+frontend/
+```
+
+It is a Next.js + Tailwind interface for an AI product analytics decision-support agent. The UI includes a ChatGPT-like sidebar, playbook selection, CSV upload affordance, structured launch memo output, diagnostics, retrieved context, evaluation metrics, and a compact controlled-agent workflow visualization.
+
+Run it locally:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+Current frontend status:
+
+- `frontend/src/app/api/analyze/route.ts` returns mock analysis data.
+- The UI does not yet call the real FastAPI pipeline.
+- CSV upload currently records filename and size in the browser, but does not upload file contents to the backend.
+- Playbook/corpus selection uses placeholder corpus metadata.
+
+Backend integration should happen in `frontend/src/app/api/analyze/route.ts`. The intended mapping is:
+
+- no CSV: call FastAPI `POST /ask` with the question and selected corpus metadata;
+- CSV present: call FastAPI `POST /analyze` with multipart form data;
+- map FastAPI fields such as `answer`, `decision`, `retrieved_chunks`, `tool_summary`, `policy_validation`, and `evaluation` into the frontend `AnalysisResult` type.
+
 ## LLM Configuration
 
 Primary hosted model defaults:

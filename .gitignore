@@ -9,4 +9,5 @@ logs/*.jsonl
 logs/*.json
 data/index/
 .DS_Store
-
+frontend/.next/
+frontend/node_modules/
