@@ -1,7 +1,8 @@
 "use client";
 
 import { BookOpen, Check, History, Plus, Sparkles } from "lucide-react";
-import { corpora, historyItems } from "@/lib/mock-data";
+import { corpora } from "@/lib/mock-data";
+import type { AnalysisHistoryItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const recommendationTone = {
@@ -13,11 +14,12 @@ const recommendationTone = {
 
 type SidebarProps = {
   selectedCorpusIds: string[];
+  historyItems: AnalysisHistoryItem[];
   onToggleCorpus: (id: string) => void;
   onNewAnalysis: () => void;
 };
 
-export function Sidebar({ selectedCorpusIds, onToggleCorpus, onNewAnalysis }: SidebarProps) {
+export function Sidebar({ selectedCorpusIds, historyItems, onToggleCorpus, onNewAnalysis }: SidebarProps) {
   return (
     <aside className="hidden h-screen w-[310px] shrink-0 border-r border-white/70 bg-white/56 px-4 py-5 shadow-soft backdrop-blur-glass lg:block">
       <div className="flex h-full flex-col gap-6">
@@ -47,7 +49,7 @@ export function Sidebar({ selectedCorpusIds, onToggleCorpus, onNewAnalysis }: Si
             History
           </div>
           <div className="space-y-2">
-            {historyItems.map((item) => (
+            {historyItems.length ? historyItems.map((item) => (
               <button
                 key={item.id}
                 className="w-full rounded-2xl border border-white/70 bg-white/54 p-3 text-left shadow-sm transition hover:bg-white/82"
@@ -65,7 +67,11 @@ export function Sidebar({ selectedCorpusIds, onToggleCorpus, onNewAnalysis }: Si
                   {item.recommendation}
                 </span>
               </button>
-            ))}
+            )) : (
+              <div className="rounded-2xl border border-white/70 bg-white/40 p-3 text-xs leading-5 text-graphite shadow-sm">
+                Session history appears after you run an analysis.
+              </div>
+            )}
           </div>
         </section>
 

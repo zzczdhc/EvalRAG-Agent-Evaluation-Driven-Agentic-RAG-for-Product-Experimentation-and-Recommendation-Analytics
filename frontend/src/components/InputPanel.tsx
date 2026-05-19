@@ -2,17 +2,18 @@
 
 import { ChangeEvent, FormEvent, KeyboardEvent, useMemo, useRef, useState } from "react";
 import { ArrowUp, FileSpreadsheet, Loader2, Paperclip, X } from "lucide-react";
-import { examplePrompts } from "@/lib/mock-data";
 import type { AnalysisResult } from "@/lib/types";
-import { cn, formatFileSize } from "@/lib/utils";
+import { formatFileSize } from "@/lib/utils";
 
 type InputPanelProps = {
   selectedCorpusIds: string[];
   onResult: (result: AnalysisResult) => void;
+  onLoadingChange?: (loading: boolean) => void;
+  onQuestionSubmitted?: (question: string, result: AnalysisResult) => void;
 };
 
-export function InputPanel({ selectedCorpusIds, onResult }: InputPanelProps) {
-  const [question, setQuestion] = useState(examplePrompts[0]);
+export function InputPanel({ selectedCorpusIds, onResult, onLoadingChange, onQuestionSubmitted }: InputPanelProps) {
+  const [question, setQuestion] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -27,10 +28,12 @@ export function InputPanel({ selectedCorpusIds, onResult }: InputPanelProps) {
 
   async function submit() {
     if (!canSubmit) return;
+    const submittedQuestion = question.trim();
     setIsLoading(true);
+    onLoadingChange?.(true);
     try {
       const formData = new FormData();
-      formData.append("question", question);
+      formData.append("question", submittedQuestion);
       formData.append("selectedCorpusIds", JSON.stringify(selectedCorpusIds));
       if (file) formData.append("csvFile", file, file.name);
 
@@ -40,8 +43,10 @@ export function InputPanel({ selectedCorpusIds, onResult }: InputPanelProps) {
       });
       const result = (await response.json()) as AnalysisResult;
       onResult(result);
+      onQuestionSubmitted?.(submittedQuestion, result);
     } finally {
       setIsLoading(false);
+      onLoadingChange?.(false);
     }
   }
 
@@ -69,30 +74,30 @@ export function InputPanel({ selectedCorpusIds, onResult }: InputPanelProps) {
         </p>
       </div>
 
-      <div className="mt-5 rounded-[28px] border border-white/80 bg-white/72 p-3 shadow-sm">
+      <div className="mt-5 rounded-[26px] border border-white/80 bg-white/72 p-2.5 shadow-sm">
         <textarea
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           onKeyDown={handleKeyDown}
           rows={3}
-          placeholder="Describe the experiment and ask for a launch recommendation. Shift+Enter for a new line."
-          className="max-h-[220px] min-h-[92px] w-full resize-none rounded-[22px] border border-transparent bg-transparent px-3 py-2 text-[15px] leading-7 text-ink outline-none placeholder:text-slate-400 focus:border-blue-100 focus:bg-white/50"
+          placeholder="Describe the experiment and ask for a launch recommendation..."
+          className="max-h-[180px] min-h-[82px] w-full resize-none rounded-[20px] border border-transparent bg-transparent px-3 py-2 text-[15px] leading-7 text-ink outline-none placeholder:text-slate-400 focus:border-blue-100 focus:bg-white/50"
         />
 
-        <div className="mt-2 flex items-center justify-between gap-3 border-t border-line px-1 pt-3">
+        <div className="mt-1 flex items-center justify-between gap-3 border-t border-line px-1 pt-2">
           <div className="flex min-w-0 items-center gap-2">
             <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               title="Attach CSV"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-white/78 text-graphite transition hover:bg-white hover:text-ink"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-slate-200 bg-white/78 text-graphite transition hover:bg-white hover:text-ink"
             >
-              <Paperclip size={17} />
+              <Paperclip size={15} />
             </button>
             {file ? (
               <div className="flex min-w-0 items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                <FileSpreadsheet size={14} className="shrink-0" />
+                <FileSpreadsheet size={13} className="shrink-0" />
                 <span className="truncate">{fileStatus}</span>
                 <button type="button" onClick={() => setFile(null)} className="rounded-full p-0.5 hover:bg-emerald-100">
                   <X size={13} />
@@ -107,27 +112,11 @@ export function InputPanel({ selectedCorpusIds, onResult }: InputPanelProps) {
             type="submit"
             disabled={!canSubmit}
             title="Analyze experiment"
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-ink text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-black disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-black disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
           >
-            {isLoading ? <Loader2 className="animate-spin" size={18} /> : <ArrowUp size={19} />}
+            {isLoading ? <Loader2 className="animate-spin" size={16} /> : <ArrowUp size={17} />}
           </button>
         </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        {examplePrompts.slice(0, 3).map((prompt) => (
-          <button
-            key={prompt}
-            type="button"
-            onClick={() => setQuestion(prompt)}
-            className={cn(
-              "rounded-full border border-slate-200 bg-white/66 px-3 py-2 text-xs font-medium text-graphite transition",
-              "hover:border-slate-300 hover:bg-white hover:text-ink",
-            )}
-          >
-            {prompt}
-          </button>
-        ))}
       </div>
     </form>
   );

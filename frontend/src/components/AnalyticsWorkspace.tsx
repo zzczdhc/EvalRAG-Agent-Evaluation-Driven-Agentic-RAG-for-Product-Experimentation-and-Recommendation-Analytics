@@ -7,11 +7,13 @@ import { ResultMemo } from "@/components/ResultMemo";
 import { Sidebar } from "@/components/Sidebar";
 import { WorkflowVisualizer } from "@/components/WorkflowVisualizer";
 import { corpora } from "@/lib/mock-data";
-import type { AnalysisResult } from "@/lib/types";
+import type { AnalysisHistoryItem, AnalysisResult } from "@/lib/types";
 
 export function AnalyticsWorkspace() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [selectedCorpusIds, setSelectedCorpusIds] = useState<string[]>(corpora.map((corpus) => corpus.id));
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [historyItems, setHistoryItems] = useState<AnalysisHistoryItem[]>([]);
 
   function toggleCorpus(id: string) {
     setSelectedCorpusIds((current) =>
@@ -19,11 +21,24 @@ export function AnalyticsWorkspace() {
     );
   }
 
+  function recordHistory(question: string, analysisResult: AnalysisResult) {
+    setHistoryItems((current) => [
+      {
+        id: `${Date.now()}`,
+        title: question,
+        timestamp: "Current session",
+        recommendation: analysisResult.recommendation,
+      },
+      ...current,
+    ].slice(0, 5));
+  }
+
   return (
     <main className="min-h-screen text-ink">
       <div className="flex min-h-screen">
         <Sidebar
           selectedCorpusIds={selectedCorpusIds}
+          historyItems={historyItems}
           onToggleCorpus={toggleCorpus}
           onNewAnalysis={() => setResult(null)}
         />
@@ -65,8 +80,13 @@ export function AnalyticsWorkspace() {
 
             <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="space-y-5">
-                <InputPanel selectedCorpusIds={selectedCorpusIds} onResult={setResult} />
-                <ResultMemo result={result} />
+                <InputPanel
+                  selectedCorpusIds={selectedCorpusIds}
+                  onResult={setResult}
+                  onLoadingChange={setIsAnalyzing}
+                  onQuestionSubmitted={recordHistory}
+                />
+                <ResultMemo result={result} isLoading={isAnalyzing} />
               </div>
               <aside className="space-y-5">
                 <WorkflowVisualizer />

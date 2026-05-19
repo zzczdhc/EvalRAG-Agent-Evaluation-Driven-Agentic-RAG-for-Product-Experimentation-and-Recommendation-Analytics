@@ -22,6 +22,7 @@ function summarizeDetails(details?: Record<string, unknown>) {
 
 type ResultMemoProps = {
   result: AnalysisResult | null;
+  isLoading?: boolean;
 };
 
 const recommendationStyle: Record<Recommendation, string> = {
@@ -66,7 +67,33 @@ function Section({ title, icon: Icon, children }: { title: string; icon: typeof 
   );
 }
 
-export function ResultMemo({ result }: ResultMemoProps) {
+function ThinkingPanel() {
+  return (
+    <section className="glass-panel liquid-edge rounded-[34px] p-8">
+      <div className="mx-auto max-w-2xl text-center">
+        <div className="mx-auto mb-5 h-2 w-48 rounded-full bg-white/70 thinking-shimmer shadow-sm" />
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-graphite">Agent is working</p>
+        <h2 className="mt-3 text-xl font-semibold tracking-tight text-ink">Retrieving evidence and drafting memo</h2>
+        <p className="mt-2 text-sm leading-6 text-graphite">
+          Routing the question, checking selected playbooks, applying policy constraints, and preparing the launch memo.
+        </p>
+        <div className="mt-5 grid gap-2 sm:grid-cols-3">
+          {["Plan", "Retrieve", "Validate"].map((label) => (
+            <div key={label} className="rounded-2xl border border-white/80 bg-white/58 p-3 text-sm font-semibold text-graphite thinking-shimmer">
+              {label}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function ResultMemo({ result, isLoading = false }: ResultMemoProps) {
+  if (isLoading) {
+    return <ThinkingPanel />;
+  }
+
   if (!result) {
     return (
       <section className="glass-panel liquid-edge rounded-[34px] p-8 text-center">
@@ -151,17 +178,19 @@ export function ResultMemo({ result }: ResultMemoProps) {
         </Section>
 
         <Section title="Retrieved context" icon={FileText}>
-          <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
             {result.retrievedContext.map((context) => (
-              <article key={`${context.source}-${context.score}`} className="rounded-2xl border border-white/80 bg-white/64 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-ink">{context.source}</p>
+              <details key={`${context.source}-${context.score}`} className="group soft-reveal w-full rounded-2xl border border-white/80 bg-white/64 p-2 transition open:bg-white/82 sm:w-auto">
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full px-2 py-1 text-sm font-semibold text-ink">
+                  <span>{context.source}</span>
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-graphite ring-1 ring-slate-200">
-                    score {context.score.toFixed(2)}
+                    {context.score.toFixed(2)}
                   </span>
+                </summary>
+                <div className="soft-reveal mt-2 rounded-xl border border-slate-100 bg-white/76 p-3 sm:w-[420px]">
+                  <p className="text-sm leading-6 text-graphite">{context.snippet}</p>
                 </div>
-                <p className="mt-2 text-sm leading-6 text-graphite">{context.snippet}</p>
-              </article>
+              </details>
             ))}
           </div>
         </Section>

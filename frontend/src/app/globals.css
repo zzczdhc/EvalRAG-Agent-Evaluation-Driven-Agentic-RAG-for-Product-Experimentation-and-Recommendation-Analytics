@@ -64,3 +64,41 @@ input {
   position: relative;
   z-index: 1;
 }
+
+.thinking-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.thinking-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-110%);
+  background: linear-gradient(100deg, transparent 0%, rgba(255, 255, 255, 0.34) 35%, rgba(255, 255, 255, 0.9) 50%, rgba(255, 255, 255, 0.34) 65%, transparent 100%);
+  animation: shimmer-sweep 1.65s ease-in-out infinite;
+}
+
+@keyframes shimmer-sweep {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(110%);
+  }
+}
+
+.soft-reveal {
+  animation: soft-reveal 180ms ease-out both;
+}
+
+@keyframes soft-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
