@@ -16,6 +16,25 @@ LOG_DIR = PROJECT_ROOT / "logs"
 DEFAULT_LOG_PATH = LOG_DIR / "rag_logs.jsonl"
 
 
+def _load_local_env(path: Path) -> None:
+    """Load simple KEY=VALUE pairs from a local .env file without overriding shell env."""
+
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_local_env(PROJECT_ROOT / ".env")
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
     if value is None:
