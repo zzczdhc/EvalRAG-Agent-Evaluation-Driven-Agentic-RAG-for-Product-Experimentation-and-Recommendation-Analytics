@@ -68,19 +68,29 @@ function Section({ title, icon: Icon, children }: { title: string; icon: typeof 
 }
 
 function ThinkingPanel() {
+  const steps = ["Plan", "Retrieve", "Diagnose", "Validate", "Draft"];
+
   return (
     <section className="glass-panel liquid-edge rounded-[34px] p-8">
       <div className="mx-auto max-w-2xl text-center">
         <div className="mx-auto mb-5 h-2 w-48 rounded-full bg-white/70 thinking-shimmer shadow-sm" />
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-graphite">Agent is working</p>
-        <h2 className="mt-3 text-xl font-semibold tracking-tight text-ink">Retrieving evidence and drafting memo</h2>
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/60 px-3 py-1.5 shadow-sm">
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-graphite">Agent thinking</span>
+          <span className="flex items-center gap-1">
+            <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-graphite" />
+            <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-graphite" />
+            <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-graphite" />
+          </span>
+        </div>
+        <h2 className="mt-4 text-xl font-semibold tracking-tight text-ink">Preparing an evidence-grounded launch memo</h2>
         <p className="mt-2 text-sm leading-6 text-graphite">
-          Routing the question, checking selected playbooks, applying policy constraints, and preparing the launch memo.
+          Planning the workflow, retrieving playbook context, checking diagnostics, and validating the recommendation.
         </p>
-        <div className="mt-5 grid gap-2 sm:grid-cols-3">
-          {["Plan", "Retrieve", "Validate"].map((label) => (
-            <div key={label} className="rounded-2xl border border-white/80 bg-white/58 p-3 text-sm font-semibold text-graphite thinking-shimmer">
-              {label}
+        <div className="mt-5 grid gap-2 sm:grid-cols-5">
+          {steps.map((label, index) => (
+            <div key={label} className="thinking-step rounded-2xl border border-white/80 bg-white/58 p-3 text-sm font-semibold text-graphite shadow-sm">
+              <span className="relative z-10 block text-[11px] font-semibold text-slate-400">{String(index + 1).padStart(2, "0")}</span>
+              <span className="relative z-10 mt-1 block">{label}</span>
             </div>
           ))}
         </div>
