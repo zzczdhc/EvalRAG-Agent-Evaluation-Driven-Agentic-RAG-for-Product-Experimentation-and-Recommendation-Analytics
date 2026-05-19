@@ -32,6 +32,26 @@ export type EvaluationMetrics = {
   decisionConfidence: number;
 };
 
+export type AnalysisTrace = {
+  queryId?: string;
+  taskType?: string;
+  agentPlan?: Record<string, unknown>;
+  requiredTools?: string[];
+  selectedCorpusIds?: string[];
+  selectedSources?: string[];
+  evidenceSufficiency?: string;
+  evidenceReasons?: string[];
+  topRetrievalScore?: number;
+  policyAction?: string;
+  generatorBackend?: string;
+  model?: string;
+  steps?: Array<{
+    step: string;
+    status: string;
+    details?: Record<string, unknown>;
+  }>;
+};
+
 export type RetrievedContext = {
   source: string;
   snippet: string;
@@ -41,6 +61,7 @@ export type RetrievedContext = {
 export type AnalysisResult = {
   recommendation: Recommendation;
   summary: string;
+  rawAnswer?: string;
   evidence: string[];
   risks: string[];
   uncertainty: string;
@@ -48,6 +69,7 @@ export type AnalysisResult = {
   retrievedContext: RetrievedContext[];
   diagnostics: DiagnosticResult[];
   evaluation: EvaluationMetrics;
+  trace?: AnalysisTrace;
 };
 
 export type AnalyzeRequest = {

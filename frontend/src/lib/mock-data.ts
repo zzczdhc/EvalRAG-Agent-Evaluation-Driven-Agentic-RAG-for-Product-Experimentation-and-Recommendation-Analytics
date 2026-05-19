@@ -63,6 +63,8 @@ export const mockResult: AnalysisResult = {
   recommendation: "Launch with Guardrails",
   summary:
     "The treatment shows encouraging primary metric movement, but the decision should remain guarded until retention and segment-level risks are verified against the experiment data.",
+  rawAnswer:
+    "## Short Answer\nMock response. Start FastAPI to view the real EvalRAG markdown memo.\n\n## Decision Recommendation\n`partial_rollout`\n",
   evidence: [
     "Primary metric appears directionally positive based on the user scenario.",
     "Guardrail guidance requires checking retention, complaint rate, and segment concentration before a full rollout.",
@@ -113,5 +115,27 @@ export const mockResult: AnalysisResult = {
     contextPrecision: 0.91,
     answerRelevance: 0.88,
     decisionConfidence: 0.78,
+  },
+  trace: {
+    queryId: "mock-query",
+    taskType: "guardrail_regression",
+    requiredTools: ["retrieve_playbook_rules", "check_policy_constraints"],
+    selectedCorpusIds: ["product-experimentation", "guardrails"],
+    selectedSources: ["launch_decision.md", "guardrail_metrics.md", "segment_analysis.md"],
+    evidenceSufficiency: "mocked",
+    evidenceReasons: ["FastAPI backend was unavailable, so the frontend returned mock trace data."],
+    topRetrievalScore: 0.91,
+    policyAction: "mock",
+    generatorBackend: "mock_frontend",
+    model: "mock",
+    steps: [
+      {
+        step: "frontend_fallback",
+        status: "mocked",
+        details: {
+          reason: "Connect FastAPI to view real workflow traces.",
+        },
+      },
+    ],
   },
 };

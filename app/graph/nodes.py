@@ -81,6 +81,17 @@ def _dedupe(items: list[str]) -> list[str]:
     return list(dict.fromkeys(items))
 
 
+def _append_trace(
+    state: ExperimentGraphState,
+    step: str,
+    status: str = "completed",
+    details: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    trace = list(state.get("trace_steps", []))
+    trace.append({"step": step, "status": status, "details": details or {}})
+    return trace
+
+
 def _replace_decision_section(answer: str, final_decision: str) -> str:
     pattern = r"(##\s*Decision Recommendation\s*\n)(.*?)(?=\n##\s+|\Z)"
     replacement = rf"\1`{final_decision}`\n"
@@ -145,7 +156,7 @@ class GraphNodes:
 
     def intake_node(self, state: ExperimentGraphState) -> ExperimentGraphState:
         question = str(state.get("question", "")).strip()
-        return {
+        next_state: ExperimentGraphState = {
             **state,
             "query_id": state.get("query_id") or new_query_id(),
             "question": question,
@@ -160,6 +171,15 @@ class GraphNodes:
             "_started_at": state.get("_started_at") or time.perf_counter(),
             "_retrieval_query": state.get("_retrieval_query"),
         }
+        next_state["trace_steps"] = _append_trace(
+            next_state,
+            "intake",
+            details={
+                "has_csv": bool(state.get("csv_text")),
+                "selected_corpus_ids": state.get("selected_corpus_ids", []),
+            },
+        )
+        return next_state
 
     def classify_task_node(self, state: ExperimentGraphState) -> ExperimentGraphState:
         text = _normalize_text(state["question"])
@@ -187,7 +207,15 @@ class GraphNodes:
             task_type = "launch_decision"
         else:
             task_type = "general_experiment_question"
-        return {**state, "task_type": task_type}
+        return {
+            **state,
+            "task_type": task_type,
+            "trace_steps": _append_trace(
+                state,
+                "task_router",
+                details={"task_type": task_type, "has_csv": bool(csv_text)},
+            ),
+        }
 
     def tool_planner_node(self, state: ExperimentGraphState) -> ExperimentGraphState:
         task_type = state.get("task_type") or "general_experiment_question"
@@ -223,7 +251,24 @@ class GraphNodes:
         }:
             required_tools.append("check_policy_constraints")
 
-        return {**state, "required_tools": _dedupe(required_tools)}
+        required_tools = _dedupe(required_tools)
+        agent_plan = {
+            "planner_backend": "bounded_rules_v1",
+            "task_type": task_type,
+            "requires_csv_analysis": bool(csv_text or state.get("tool_summary")),
+            "selected_corpus_ids": state.get("selected_corpus_ids", []),
+            "selected_sources": state.get("selected_sources", []),
+            "planned_tools": required_tools,
+            "retrieval_strategy": "corpus-scoped hybrid BM25 + hashed vector retrieval",
+            "evidence_retry_policy": "If retrieved evidence is empty or weak, broaden the retrieval query once before generation.",
+            "decision_policy": "LLM writes the memo, while deterministic policy constraints can confirm or override unsafe launch labels.",
+        }
+        return {
+            **state,
+            "agent_plan": agent_plan,
+            "required_tools": required_tools,
+            "trace_steps": _append_trace(state, "agent_planner", details=agent_plan),
+        }
 
     def tool_executor_node(self, state: ExperimentGraphState) -> ExperimentGraphState:
         required_tools = state.get("required_tools", [])
@@ -231,11 +276,23 @@ class GraphNodes:
 
         if state.get("tool_summary") is not None:
             tool_results["tools_used"] = [tool for tool in required_tools if tool != "retrieve_playbook_rules"]
-            return {**state, "tool_results": tool_results}
+            return {
+                **state,
+                "tool_results": tool_results,
+                "trace_steps": _append_trace(
+                    state,
+                    "tool_executor",
+                    details={"mode": "provided_summary", "tools_used": tool_results["tools_used"]},
+                ),
+            }
 
         csv_text = state.get("csv_text")
         if not csv_text:
-            return {**state, "tool_results": tool_results}
+            return {
+                **state,
+                "tool_results": tool_results,
+                "trace_steps": _append_trace(state, "tool_executor", details={"mode": "no_csv", "tools_used": []}),
+            }
 
         rows = load_csv_text(csv_text)
         validation = validate_experiment_rows(rows)
@@ -276,7 +333,21 @@ class GraphNodes:
 
         tool_results["run_data_validation"] = validation
         tool_results["tools_used"] = [tool for tool in required_tools if tool != "retrieve_playbook_rules"]
-        return {**state, "tool_results": tool_results, "tool_summary": summary}
+        return {
+            **state,
+            "tool_results": tool_results,
+            "tool_summary": summary,
+            "trace_steps": _append_trace(
+                state,
+                "tool_executor",
+                details={
+                    "mode": "csv",
+                    "tools_used": tool_results["tools_used"],
+                    "valid_csv": validation.get("valid"),
+                    "row_count": validation.get("row_count"),
+                },
+            ),
+        }
 
     def retrieval_node(self, state: ExperimentGraphState) -> ExperimentGraphState:
         task_type = state.get("task_type")
@@ -293,7 +364,22 @@ class GraphNodes:
         if task_type in expansions:
             retrieval_query = f"{retrieval_query} {expansions[task_type]}"
         retrieved = self.deps.retrieve_fn(retrieval_query)
-        return {**state, "retrieved_chunks": retrieved, "_retrieval_query": retrieval_query}
+        top_sources = [item.get("source", "unknown") for item in retrieved[:5]]
+        return {
+            **state,
+            "retrieved_chunks": retrieved,
+            "_retrieval_query": retrieval_query,
+            "trace_steps": _append_trace(
+                state,
+                "retrieval",
+                details={
+                    "query": retrieval_query,
+                    "selected_sources": state.get("selected_sources", []),
+                    "retrieved_chunk_count": len(retrieved),
+                    "top_sources": top_sources,
+                },
+            ),
+        }
 
     def evidence_bundle_node(self, state: ExperimentGraphState) -> ExperimentGraphState:
         tool_summary = state.get("tool_summary") or {}
@@ -340,27 +426,69 @@ class GraphNodes:
             "segment_flags": _dedupe(segment_flags),
             "missing_information": _dedupe(missing_information),
         }
-        return {**state, "evidence_bundle": evidence_bundle}
+        return {
+            **state,
+            "evidence_bundle": evidence_bundle,
+            "trace_steps": _append_trace(
+                state,
+                "evidence_bundle",
+                details={
+                    "validity_flags": evidence_bundle["validity_flags"],
+                    "guardrail_flags": evidence_bundle["guardrail_flags"],
+                    "segment_flags": evidence_bundle["segment_flags"],
+                    "missing_information": evidence_bundle["missing_information"],
+                },
+            ),
+        }
 
     def evidence_checker_node(self, state: ExperimentGraphState) -> ExperimentGraphState:
         evidence_bundle = state.get("evidence_bundle") or {}
         validity_flags = set(evidence_bundle.get("validity_flags", []))
         missing_information = set(evidence_bundle.get("missing_information", []))
         guardrail_flags = set(evidence_bundle.get("guardrail_flags", []))
+        retrieved_chunks = state.get("retrieved_chunks", [])
+        top_score = float(retrieved_chunks[0].get("score", 0.0)) if retrieved_chunks else 0.0
+        selected_sources = state.get("selected_sources", [])
+        reasons: list[str] = []
 
         if "sample_ratio_mismatch_failed" in validity_flags:
             sufficiency = "sufficient"
+            reasons.append("validity failure is sufficient to block trusting the result")
         elif "non_random_rollout_detected" in validity_flags:
             sufficiency = "sufficient"
+            reasons.append("non-random rollout is sufficient to require quasi-experimental analysis")
         elif "no_retrieved_playbook_rules" in missing_information:
             sufficiency = "insufficient"
+            reasons.append("no playbook chunks were retrieved")
         elif state.get("csv_text") and not state.get("tool_summary"):
             sufficiency = "insufficient"
+            reasons.append("CSV was provided but no tool summary was produced")
         elif guardrail_flags:
             sufficiency = "sufficient"
+            reasons.append("guardrail risk evidence is present")
+        elif selected_sources and not retrieved_chunks:
+            sufficiency = "insufficient"
+            reasons.append("selected corpus filter returned no chunks")
+        elif retrieved_chunks and top_score < 0.15:
+            sufficiency = "insufficient"
+            reasons.append("top retrieval score is low")
         else:
             sufficiency = "sufficient" if state.get("retrieved_chunks") else "insufficient"
-        return {**state, "evidence_sufficiency": sufficiency}
+            reasons.append("retrieved chunks available" if retrieved_chunks else "no retrieved chunks available")
+        evidence_check = {
+            "status": sufficiency,
+            "reasons": reasons,
+            "top_score": round(top_score, 6),
+            "retrieved_chunk_count": len(retrieved_chunks),
+            "selected_sources": selected_sources,
+            "retry_count": state.get("retry_count", 0),
+        }
+        return {
+            **state,
+            "evidence_sufficiency": sufficiency,
+            "evidence_check": evidence_check,
+            "trace_steps": _append_trace(state, "evidence_checker", status=sufficiency, details=evidence_check),
+        }
 
     def replan_node(self, state: ExperimentGraphState) -> ExperimentGraphState:
         retry_count = int(state.get("retry_count", 0)) + 1
@@ -373,6 +501,12 @@ class GraphNodes:
             "retry_count": retry_count,
             "required_tools": _dedupe(required_tools),
             "_retrieval_query": fallback_query,
+            "trace_steps": _append_trace(
+                state,
+                "evidence_retry",
+                status="retry",
+                details={"retry_count": retry_count, "fallback_query": fallback_query},
+            ),
         }
 
     def decision_node(self, state: ExperimentGraphState) -> ExperimentGraphState:
@@ -458,7 +592,16 @@ class GraphNodes:
             "blocking_risks": _dedupe([item for item in blocking_risks if item]),
             "required_next_steps": required_next_steps,
         }
-        return {**state, "decision_json": decision_json, "final_decision": decision}
+        return {
+            **state,
+            "decision_json": decision_json,
+            "final_decision": decision,
+            "trace_steps": _append_trace(
+                state,
+                "decision_draft",
+                details={"decision": decision, "confidence": confidence, "primary_reason": primary_reason},
+            ),
+        }
 
     def policy_validator_node(self, state: ExperimentGraphState) -> ExperimentGraphState:
         decision_json = state.get("decision_json") or {}
@@ -473,6 +616,15 @@ class GraphNodes:
             "policy_validation": policy_validation,
             "policy_decision": policy_validation.get("policy_decision"),
             "final_decision": policy_validation.get("final_decision", llm_decision),
+            "trace_steps": _append_trace(
+                state,
+                "policy_validator",
+                details={
+                    "policy_action": policy_validation.get("policy_action"),
+                    "policy_override": policy_validation.get("policy_override"),
+                    "final_decision": policy_validation.get("final_decision", llm_decision),
+                },
+            ),
         }
 
     def revise_decision_node(self, state: ExperimentGraphState) -> ExperimentGraphState:
@@ -492,6 +644,12 @@ class GraphNodes:
             "decision_json": decision_json,
             "retry_count": int(state.get("retry_count", 0)) + 1,
             "final_decision": revised_decision,
+            "trace_steps": _append_trace(
+                state,
+                "decision_revision",
+                status="policy_override",
+                details={"revised_decision": revised_decision},
+            ),
         }
 
     def memo_generator_node(self, state: ExperimentGraphState) -> ExperimentGraphState:

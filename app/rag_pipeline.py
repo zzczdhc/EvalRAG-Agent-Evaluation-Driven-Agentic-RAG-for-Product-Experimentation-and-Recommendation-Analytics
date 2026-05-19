@@ -12,6 +12,7 @@ from app.chunking import build_chunks, load_chunks
 from app.concept_coverage import evaluate_concepts
 from app.concept_judge import judge_concepts
 from app.config import PLAYBOOK_DIR, settings
+from app.corpus import resolve_corpus_sources
 from app.graph import GraphDependencies, run_workflow
 from app.llm_generator import LLMGenerationConfig, LLMGenerationError, generate_llm_answer
 from app.policy_validator import validate_decision
@@ -251,8 +252,13 @@ class EvalRAGPipeline:
             )
         self.retriever = SimpleHybridRetriever(chunks, alpha=self.alpha)
 
-    def retrieve(self, question: str) -> list[dict[str, Any]]:
-        retrieved_results = self.retriever.search(question, top_k=self.top_k, alpha=self.alpha)
+    def retrieve(self, question: str, selected_sources: list[str] | None = None) -> list[dict[str, Any]]:
+        retrieved_results = self.retriever.search(
+            question,
+            top_k=self.top_k,
+            alpha=self.alpha,
+            source_filter=selected_sources,
+        )
         return results_to_dicts(retrieved_results)
 
     def answer(
@@ -261,13 +267,19 @@ class EvalRAGPipeline:
         expected_sources: list[str] | None = None,
         expected_concepts: list[str] | None = None,
         expected_decision: str | None = None,
+        selected_corpus_ids: list[str] | None = None,
         tool_summary: dict[str, Any] | None = None,
         log: bool = True,
         concept_judge_enabled: bool | None = None,
         csv_text: str | None = None,
     ) -> dict[str, Any]:
+        selected_sources = resolve_corpus_sources(selected_corpus_ids)
+
+        def retrieve_with_corpus_filter(query: str) -> list[dict[str, Any]]:
+            return self.retrieve(query, selected_sources=selected_sources)
+
         deps = GraphDependencies(
-            retrieve_fn=self.retrieve,
+            retrieve_fn=retrieve_with_corpus_filter,
             generate_llm_answer_fn=generate_llm_answer,
             validate_decision_fn=validate_decision,
             evaluate_trace_fn=evaluate_trace,
@@ -282,6 +294,8 @@ class EvalRAGPipeline:
                 "question": question,
                 "csv_text": csv_text,
                 "tool_summary": tool_summary,
+                "selected_corpus_ids": selected_corpus_ids or [],
+                "selected_sources": selected_sources,
                 "expected_sources": expected_sources or [],
                 "expected_concepts": expected_concepts or [],
                 "expected_decision": expected_decision,
@@ -324,6 +338,8 @@ class EvalRAGPipeline:
             "expected_sources": expected_sources or [],
             "expected_concepts": expected_concepts or [],
             "expected_decision": expected_decision,
+            "selected_corpus_ids": selected_corpus_ids or [],
+            "selected_sources": selected_sources,
             "evaluation": evaluation,
             "latency_seconds": latency,
             "model": final_state.get("model", settings.llm_model),
@@ -333,8 +349,11 @@ class EvalRAGPipeline:
             "decision_json": final_state.get("decision_json"),
             "task_type": final_state.get("task_type"),
             "required_tools": final_state.get("required_tools", []),
+            "agent_plan": final_state.get("agent_plan"),
             "evidence_bundle": final_state.get("evidence_bundle"),
+            "evidence_check": final_state.get("evidence_check"),
             "evidence_sufficiency": final_state.get("evidence_sufficiency"),
+            "trace_steps": final_state.get("trace_steps", []),
         }
         if final_state.get("llm_answer_before_policy"):
             record["llm_answer_before_policy"] = final_state["llm_answer_before_policy"]
@@ -362,6 +381,21 @@ def record_to_public_response(record: dict[str, Any]) -> dict[str, Any]:
         "policy_validation": record.get("policy_validation", {}),
         "retrieved_chunks": record["retrieved_chunks"],
         "evaluation": record["evaluation"],
+        "trace": {
+            "query_id": record.get("query_id"),
+            "task_type": record.get("task_type"),
+            "required_tools": record.get("required_tools", []),
+            "agent_plan": record.get("agent_plan"),
+            "selected_corpus_ids": record.get("selected_corpus_ids", []),
+            "selected_sources": record.get("selected_sources", []),
+            "evidence_sufficiency": record.get("evidence_sufficiency"),
+            "evidence_check": record.get("evidence_check"),
+            "trace_steps": record.get("trace_steps", []),
+            "decision_json": record.get("decision_json"),
+            "policy_validation": record.get("policy_validation", {}),
+            "generator_backend": record.get("generator_backend", "openai_compatible"),
+            "model": record.get("model"),
+        },
         "latency_seconds": record["latency_seconds"],
         "model": record["model"],
         "generator_backend": record.get("generator_backend", "openai_compatible"),

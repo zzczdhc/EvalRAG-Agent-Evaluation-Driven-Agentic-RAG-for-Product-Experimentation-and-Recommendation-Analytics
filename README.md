@@ -39,14 +39,14 @@ Agent controller
         +--> Task router
         |    Decide whether the request is knowledge-only, CSV analysis, or mixed.
         |
-        +--> Tool planner
-        |    Choose allowed tools: retrieval, SRM check, lift calculation, segment analysis.
+        +--> Agent planner
+        |    Build a bounded plan: task type, retrieval scope, allowed tools, and retry policy.
         |
         +--> Evidence collection
         |    Retrieve playbook chunks and optionally run CSV diagnostics.
         |
         +--> Evidence sufficiency check
-        |    If evidence is weak, retry retrieval, run another tool, or ask for missing information.
+        |    If evidence is weak, broaden the retrieval query and retry once before generation.
         |
         +--> LLM launch memo
         |    Generate a structured recommendation using the collected evidence.
@@ -60,11 +60,11 @@ Final memo + trace log + evaluation metrics
 
 | Stage | Responsibility | Current status |
 | --- | --- | --- |
-| Task router | Classify the user request and decide whether CSV tools are needed. | Rule-based now; planned LLM planner upgrade. |
-| Tool planner | Select from allowed tools instead of letting the model take arbitrary actions. | Rule-based now; planned structured LLM plan. |
-| Retrieval | Search selected playbooks for relevant experimentation guidance. | Hybrid BM25 + vector-style retrieval. |
+| Task router | Classify the user request and decide whether CSV tools are needed. | Bounded rule-based router. |
+| Agent planner | Select allowed tools, retrieval scope, retry policy, and decision guardrails. | Explicit structured `agent_plan` in the trace. |
+| Retrieval | Search selected playbooks for relevant experimentation guidance. | Corpus-scoped hybrid BM25 + vector-style retrieval. |
 | CSV diagnostics | Compute experiment facts such as SRM, lift, guardrail movement, and segment risk. | Deterministic statistical tools. |
-| Evidence sufficiency | Decide whether retrieved/contextual evidence is enough to answer safely. | Planned upgrade. |
+| Evidence sufficiency | Decide whether retrieved/contextual evidence is enough to answer safely. | Implemented with traceable reasons and one retrieval retry path. |
 | Memo generation | Produce the launch recommendation memo. | OpenAI-compatible LLM. |
 | Policy validation | Block unsafe launch decisions under explicit hard constraints. | Deterministic policy validator. |
 | Evaluation loop | Measure retrieval quality, answer quality, policy corrections, and failure modes. | Custom eval + Ragas + failure inspection. |
@@ -73,14 +73,14 @@ EvalRAG is designed as a bounded product analytics agent. The agent does not fre
 
 In the current implementation:
 
-- task routing and tool planning are rule-based;
+- task routing and agent planning are bounded and traceable;
 - CSV analysis is handled by deterministic statistical tools;
-- playbook lookup is handled by hybrid retrieval;
+- playbook lookup is handled by corpus-scoped hybrid retrieval;
 - memo generation and the proposed decision are handled by the LLM;
 - final decision safety is checked by the policy validator;
 - quality is measured by custom eval, Ragas, and failure inspection.
 
-The near-term agent upgrade is to make the controller more adaptive while keeping the workflow bounded: the LLM should produce a structured plan, choose from allowed tools, inspect retrieved evidence, retry retrieval when evidence is weak, verify user claims against CSV outputs, and ask for missing information when the available evidence is insufficient.
+The near-term agent upgrade is to make the controller more adaptive while keeping the workflow bounded: the LLM can produce the structured plan, but it should still choose only from allowed tools, inspect retrieved evidence, retry retrieval when evidence is weak, verify user claims against CSV outputs, and ask for missing information when the available evidence is insufficient.
 
 That distinction is intentional. Product launch analysis should not be a fully open-ended autonomous agent. It should be an auditable agentic workflow with constrained tools, explicit evidence, deterministic guardrails, and measurable failure modes.
 
@@ -89,11 +89,13 @@ That distinction is intentional. Product launch analysis should not be a fully o
 - Domain-specific RAG over a product experimentation playbook.
 - Hybrid retrieval using BM25 plus dependency-light vector scoring.
 - A LangGraph analyst workflow with explicit state transitions.
+- A bounded agent plan recorded in each trace, including selected corpora, planned tools, and evidence retry policy.
 - OpenAI-compatible LLM generation with parseable decision labels.
 - Local Ollama fallback support for development.
 - Statistical tools for synthetic experiment CSVs: SRM, metric lift, approximate tests, and segment analysis.
 - Policy validation for hard experimentation constraints such as SRM failure, guardrail regression, non-random rollout, and segment harm.
 - Trace logging for question, retrieved chunks, scores, tool outputs, decisions, latency, model, and backend.
+- Frontend trace/debug view for workflow steps, retrieval scope, evidence checks, and raw backend markdown.
 - Custom evaluation for retrieval quality, concept coverage, decision accuracy, policy corrections, and latency.
 - Ragas evaluation for faithfulness, answer relevancy, context precision, context recall, and answer correctness.
 - Failure inspection reports that join Ragas scores with the actual question, answer, reference, expected sources, and retrieved chunks.
@@ -259,7 +261,8 @@ Current frontend/backend status:
 - CSV-backed requests call FastAPI `POST /analyze` with multipart form data;
 - FastAPI responses are mapped into the frontend `AnalysisResult` shape;
 - if the Python backend is unavailable, the UI falls back to mock data so frontend development still works;
-- Playbook/corpus selection uses placeholder corpus metadata.
+- Playbook/corpus selection is forwarded to FastAPI and limits retrieval to the mapped playbook source files;
+- the result panel exposes an agent trace with planner output, retrieval scope, evidence sufficiency reasons, policy action, workflow steps, and raw backend markdown.
 
 The backend URL defaults to:
 
@@ -277,7 +280,7 @@ The current mapping is:
 
 - no CSV: call FastAPI `POST /ask` with the question;
 - CSV present: call FastAPI `POST /analyze` with multipart form data;
-- map FastAPI fields such as `answer`, `decision`, `retrieved_chunks`, `tool_summary`, `policy_validation`, and `evaluation` into the frontend `AnalysisResult` type.
+- map FastAPI fields such as `answer`, `decision`, `retrieved_chunks`, `tool_summary`, `policy_validation`, `evaluation`, and `trace` into the frontend `AnalysisResult` type.
 
 ## LLM Configuration
 
@@ -458,10 +461,13 @@ Important caveat: product experimentation memos often combine user-provided scen
 Internally, each run also records structured fields such as:
 
 - `task_type`
+- `agent_plan`
 - `required_tools`
 - `tool_summary`
 - `evidence_bundle`
+- `evidence_check`
 - `evidence_sufficiency`
+- `trace_steps`
 - `decision_json`
 - `policy_validation`
 - `llm_decision`

@@ -1,6 +1,24 @@
-import { AlertTriangle, ArrowRight, BarChart3, CheckCircle2, ClipboardList, FileText, Gauge, ShieldAlert } from "lucide-react";
+import { AlertTriangle, ArrowRight, BarChart3, CheckCircle2, ClipboardList, FileText, Gauge, Route, ShieldAlert } from "lucide-react";
 import type { AnalysisResult, DiagnosticResult, Recommendation } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+function summarizeDetails(details?: Record<string, unknown>) {
+  if (!details) return "No detail payload.";
+  const preferredKeys = [
+    "task_type",
+    "planned_tools",
+    "retrieved_chunk_count",
+    "top_sources",
+    "status",
+    "reasons",
+    "final_decision",
+    "policy_action",
+  ];
+  const lines = preferredKeys
+    .filter((key) => details[key] !== undefined)
+    .map((key) => `${key}: ${Array.isArray(details[key]) ? (details[key] as unknown[]).join(", ") : String(details[key])}`);
+  return lines.length ? lines.join("\n") : JSON.stringify(details, null, 2);
+}
 
 type ResultMemoProps = {
   result: AnalysisResult | null;
@@ -164,6 +182,92 @@ export function ResultMemo({ result }: ResultMemoProps) {
           </ol>
         </Section>
       </div>
+
+      {result.trace ? (
+        <div className="mt-4">
+          <Section title="Agent trace" icon={Route}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-white/80 bg-white/64 p-3">
+                <p className="text-xs font-medium text-graphite">Task type</p>
+                <p className="mt-1 font-mono text-sm text-ink">{result.trace.taskType ?? "unknown"}</p>
+              </div>
+              <div className="rounded-2xl border border-white/80 bg-white/64 p-3">
+                <p className="text-xs font-medium text-graphite">Evidence status</p>
+                <p className="mt-1 font-mono text-sm text-ink">{result.trace.evidenceSufficiency ?? "unknown"}</p>
+              </div>
+              <div className="rounded-2xl border border-white/80 bg-white/64 p-3">
+                <p className="text-xs font-medium text-graphite">Model backend</p>
+                <p className="mt-1 font-mono text-sm text-ink">{result.trace.generatorBackend ?? "unknown"}</p>
+              </div>
+              <div className="rounded-2xl border border-white/80 bg-white/64 p-3">
+                <p className="text-xs font-medium text-graphite">Top retrieval score</p>
+                <p className="mt-1 font-mono text-sm text-ink">{(result.trace.topRetrievalScore ?? 0).toFixed(3)}</p>
+              </div>
+            </div>
+
+            {result.trace.requiredTools?.length ? (
+              <div className="mt-3 rounded-2xl border border-white/80 bg-white/64 p-3">
+                <p className="text-xs font-medium text-graphite">Tools planned</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {result.trace.requiredTools.map((tool) => (
+                    <span key={tool} className="rounded-full bg-slate-100 px-2 py-1 font-mono text-[11px] text-graphite ring-1 ring-slate-200">
+                      {tool}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {result.trace.selectedSources?.length ? (
+              <div className="mt-3 rounded-2xl border border-white/80 bg-white/64 p-3">
+                <p className="text-xs font-medium text-graphite">Corpus-limited sources</p>
+                <p className="mt-2 text-sm leading-6 text-graphite">{result.trace.selectedSources.join(", ")}</p>
+              </div>
+            ) : null}
+
+            {result.trace.evidenceReasons?.length ? (
+              <div className="mt-3 rounded-2xl border border-white/80 bg-white/64 p-3">
+                <p className="text-xs font-medium text-graphite">Evidence check reasons</p>
+                <ul className="mt-2 space-y-1 text-sm leading-6 text-graphite">
+                  {result.trace.evidenceReasons.map((reason) => (
+                    <li key={reason} className="flex gap-2">
+                      <ArrowRight className="mt-1 shrink-0" size={13} />
+                      <span>{reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {result.trace.steps?.length ? (
+              <div className="mt-3 rounded-2xl border border-white/80 bg-white/64 p-3">
+                <p className="text-xs font-medium text-graphite">Raw workflow trace</p>
+                <div className="mt-3 space-y-2">
+                  {result.trace.steps.map((step, index) => (
+                    <details key={`${step.step}-${index}`} className="rounded-xl border border-slate-200 bg-white/70 px-3 py-2">
+                      <summary className="cursor-pointer text-sm font-semibold text-ink">
+                        {String(index + 1).padStart(2, "0")} · {step.step} · {step.status}
+                      </summary>
+                      <pre className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 text-[11px] leading-5 text-slate-100">
+                        {summarizeDetails(step.details)}
+                      </pre>
+                    </details>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {result.rawAnswer ? (
+              <details className="mt-3 rounded-2xl border border-white/80 bg-white/64 p-3">
+                <summary className="cursor-pointer text-xs font-medium text-graphite">Raw backend markdown</summary>
+                <pre className="mt-3 max-h-[360px] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-950 p-3 text-[11px] leading-5 text-slate-100">
+                  {result.rawAnswer}
+                </pre>
+              </details>
+            ) : null}
+          </Section>
+        </div>
+      ) : null}
     </section>
   );
 }

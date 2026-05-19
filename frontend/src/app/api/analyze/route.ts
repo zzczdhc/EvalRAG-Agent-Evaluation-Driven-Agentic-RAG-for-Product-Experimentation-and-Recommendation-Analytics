@@ -18,6 +18,7 @@ type BackendResponse = {
   evaluation?: Record<string, unknown>;
   policy_validation?: Record<string, unknown>;
   tool_summary?: Record<string, unknown>;
+  trace?: Record<string, unknown>;
 };
 
 const BACKEND_URL = process.env.EVALRAG_BACKEND_URL ?? "http://127.0.0.1:8000";
@@ -127,6 +128,7 @@ function mapBackendResponse(data: BackendResponse): AnalysisResult {
   return {
     recommendation: mapDecision(data.final_decision ?? data.decision),
     summary,
+    rawAnswer: answer,
     evidence: evidence.length ? evidence : context.map((item) => `${item.source}: ${item.snippet}`),
     risks: risks.length ? risks : mockResult.risks,
     uncertainty:
@@ -140,6 +142,47 @@ function mapBackendResponse(data: BackendResponse): AnalysisResult {
       answerRelevance: asNumber(evaluation.concept_coverage, 0.8),
       decisionConfidence: Boolean(data.policy_validation?.policy_override) ? 0.74 : 0.84,
     },
+    trace: mapTrace(data),
+  };
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
+function mapTrace(data: BackendResponse) {
+  const trace = data.trace ?? {};
+  const evidenceCheck = trace.evidence_check as Record<string, unknown> | undefined;
+  const policyValidation = trace.policy_validation as Record<string, unknown> | undefined;
+  const traceSteps = Array.isArray(trace.trace_steps)
+    ? trace.trace_steps
+        .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+        .map((item) => ({
+          step: typeof item.step === "string" ? item.step : "unknown",
+          status: typeof item.status === "string" ? item.status : "completed",
+          details:
+            typeof item.details === "object" && item.details !== null
+              ? (item.details as Record<string, unknown>)
+              : undefined,
+        }))
+    : [];
+  return {
+    queryId: typeof trace.query_id === "string" ? trace.query_id : undefined,
+    taskType: typeof trace.task_type === "string" ? trace.task_type : undefined,
+    agentPlan:
+      typeof trace.agent_plan === "object" && trace.agent_plan !== null
+        ? (trace.agent_plan as Record<string, unknown>)
+        : undefined,
+    requiredTools: stringList(trace.required_tools),
+    selectedCorpusIds: stringList(trace.selected_corpus_ids),
+    selectedSources: stringList(trace.selected_sources),
+    evidenceSufficiency: typeof trace.evidence_sufficiency === "string" ? trace.evidence_sufficiency : undefined,
+    evidenceReasons: stringList(evidenceCheck?.reasons),
+    topRetrievalScore: asNumber(evidenceCheck?.top_score, 0),
+    policyAction: typeof policyValidation?.policy_action === "string" ? policyValidation.policy_action : undefined,
+    generatorBackend: typeof trace.generator_backend === "string" ? trace.generator_backend : undefined,
+    model: typeof trace.model === "string" ? trace.model : undefined,
+    steps: traceSteps,
   };
 }
 
@@ -161,7 +204,7 @@ async function callBackend(question: string, selectedCorpusIds: string[], csvFil
   const response = await fetch(`${BACKEND_URL}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, selected_corpus_ids: selectedCorpusIds }),
   });
   if (!response.ok) throw new Error(`FastAPI /ask returned ${response.status}`);
   return (await response.json()) as BackendResponse;

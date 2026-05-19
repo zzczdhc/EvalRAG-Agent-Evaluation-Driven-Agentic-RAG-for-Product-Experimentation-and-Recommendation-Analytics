@@ -1,44 +1,44 @@
-import { Brain, Database, FileSearch, GitBranch, LineChart, RefreshCcw, Route, WandSparkles } from "lucide-react";
+import { Brain, Database, FileSearch, GitBranch, LineChart, RefreshCcw, Route, ShieldCheck } from "lucide-react";
 
 const steps = [
   {
-    label: "User question",
-    description: "Natural-language experiment or product analytics question.",
+    label: "1. Intake",
+    description: "Question, optional CSV, and selected playbooks enter one bounded workflow state.",
     icon: Brain,
   },
   {
-    label: "Query rewrite",
-    description: "Normalize the question into retrieval- and tool-friendly form.",
-    icon: WandSparkles,
-  },
-  {
-    label: "Problem router",
-    description: "Classify whether the task is RAG-only, CSV analysis, or mixed.",
+    label: "2. Agent planner",
+    description: "Classify the task and build a structured plan: tools, retrieval scope, and retry policy.",
     icon: Route,
   },
   {
-    label: "Hybrid retrieval",
-    description: "Search playbooks with keyword and semantic-style scoring.",
+    label: "3. Corpus-scoped retrieval",
+    description: "Search only selected playbook sources with hybrid keyword and vector-style scoring.",
     icon: FileSearch,
   },
   {
-    label: "Re-ranker",
-    description: "Prioritize the most useful supporting chunks before generation.",
+    label: "4. Evidence sufficiency check",
+    description: "Check whether evidence is enough. If weak, broaden the retrieval query once and retry.",
     icon: GitBranch,
   },
   {
-    label: "CSV diagnostics",
-    description: "Run SRM, lift, guardrail, and segment checks when data exists.",
+    label: "5. CSV diagnostics",
+    description: "When CSV exists, run SRM, lift, significance, guardrail, and segment checks.",
     icon: LineChart,
   },
   {
-    label: "Launch memo",
-    description: "Generate a structured recommendation with evidence and caveats.",
+    label: "6. Memo generation",
+    description: "Generate a source-grounded launch memo with risks, uncertainty, and next actions.",
     icon: Database,
   },
   {
-    label: "Evaluation loop",
-    description: "Log traces, score outputs, inspect failures, then improve RAG.",
+    label: "7. Policy validation",
+    description: "Apply hard launch constraints so invalid or risky cases cannot become unsafe launches.",
+    icon: ShieldCheck,
+  },
+  {
+    label: "8. Evaluation loop",
+    description: "Save traces, score RAG quality, inspect failures, and improve playbooks/retrieval.",
     icon: RefreshCcw,
   },
 ];
@@ -68,12 +68,7 @@ export function WorkflowVisualizer() {
                 <Icon size={15} />
               </div>
               <div className="min-w-0 flex-1 rounded-2xl border border-white/75 bg-white/58 px-3 py-3 shadow-sm transition hover:bg-white/82">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold leading-5 text-ink">{step.label}</p>
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-graphite ring-1 ring-slate-200">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                </div>
+                <p className="text-sm font-semibold leading-5 text-ink">{step.label}</p>
                 <p className="mt-1 text-xs leading-5 text-graphite">{step.description}</p>
               </div>
             </div>
@@ -84,8 +79,8 @@ export function WorkflowVisualizer() {
       <div className="mt-5 rounded-2xl border border-white/75 bg-white/54 p-3">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-graphite">Current mode</p>
         <p className="mt-2 text-sm leading-6 text-graphite">
-          The UI is live, but the analysis response is currently mocked. The real backend can be connected through the
-          Next.js API route without redesigning this interface.
+          The UI proxies to FastAPI when the backend is running, then falls back to mock data only when the backend is
+          unavailable.
         </p>
       </div>
     </section>

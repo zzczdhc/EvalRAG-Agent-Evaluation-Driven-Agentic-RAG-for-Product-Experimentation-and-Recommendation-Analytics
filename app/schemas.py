@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=3)
+    selected_corpus_ids: list[str] = Field(default_factory=list)
     expected_sources: list[str] = Field(default_factory=list)
     expected_concepts: list[str] = Field(default_factory=list)
     expected_decision: str | None = None
@@ -25,6 +26,7 @@ class AskResponse(BaseModel):
     policy_validation: dict[str, Any] = Field(default_factory=dict)
     retrieved_chunks: list[dict[str, Any]]
     evaluation: dict[str, Any]
+    trace: dict[str, Any] = Field(default_factory=dict)
     latency_seconds: float
     model: str
     generator_backend: str = "openai_compatible"
@@ -35,4 +37,3 @@ class AskResponse(BaseModel):
 
 class AnalyzeResponse(AskResponse):
     tool_summary: dict[str, Any]
-

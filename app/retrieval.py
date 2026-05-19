@@ -98,7 +98,13 @@ class SimpleHybridRetriever:
             scores.append(score)
         return scores
 
-    def search(self, query: str, top_k: int = 5, alpha: float | None = None) -> list[RetrievalResult]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        alpha: float | None = None,
+        source_filter: list[str] | None = None,
+    ) -> list[RetrievalResult]:
         query_tokens = tokenize(query)
         query_vector = _hashed_vector(query_tokens)
         bm25_scores = self._bm25_scores(query_tokens)
@@ -107,8 +113,11 @@ class SimpleHybridRetriever:
         max_vector = max(vector_scores) or 1.0
         weight = self.alpha if alpha is None else alpha
 
+        allowed_sources = set(source_filter or [])
         scored: list[tuple[float, float, float, int]] = []
         for index, (bm25_score, vector_score) in enumerate(zip(bm25_scores, vector_scores, strict=True)):
+            if allowed_sources and self.chunks[index].source not in allowed_sources:
+                continue
             bm25_norm = bm25_score / max_bm25 if max_bm25 else 0.0
             vector_norm = vector_score / max_vector if max_vector else 0.0
             final_score = weight * vector_norm + (1 - weight) * bm25_norm

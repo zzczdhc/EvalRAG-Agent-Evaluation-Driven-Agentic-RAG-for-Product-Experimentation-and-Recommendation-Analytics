@@ -10,16 +10,21 @@ class ExperimentGraphState(TypedDict, total=False):
     question: str
     csv_text: str | None
     task_type: str | None
+    agent_plan: dict[str, Any] | None
     required_tools: list[str]
     tool_results: dict[str, Any]
     tool_summary: dict[str, Any] | None
+    selected_corpus_ids: list[str]
+    selected_sources: list[str]
     retrieved_chunks: list[dict[str, Any]]
     evidence_bundle: dict[str, Any] | None
+    evidence_check: dict[str, Any] | None
     evidence_sufficiency: str | None
     decision_json: dict[str, Any] | None
     policy_validation: dict[str, Any] | None
     answer: str | None
     evaluation: dict[str, Any] | None
+    trace_steps: list[dict[str, Any]]
     retry_count: int
     max_retries: int
     errors: list[str]

@@ -179,7 +179,7 @@ export function InputPanel({ onResult }: InputPanelProps) {
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-5 text-graphite">
-          Mock API mode: this UI is ready for the real EvalRAG FastAPI pipeline.
+          Uses the FastAPI backend when it is running; falls back to mock data only when unavailable.
         </p>
         <button
           type="submit"
