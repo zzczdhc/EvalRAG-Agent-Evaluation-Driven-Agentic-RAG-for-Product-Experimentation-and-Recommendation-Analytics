@@ -32,27 +32,38 @@ Build -> Log -> Evaluate -> Diagnose -> Improve -> Re-run
 
 ```mermaid
 flowchart TD
-    A[User question or CSV + question] --> B[Task classifier]
-    B --> C[Tool planner]
-    C --> D{Needs data analysis?}
-    D -- Yes --> E[CSV validation + stats tools]
-    D -- No --> F[Playbook retrieval]
-    E --> F[Playbook retrieval]
-    F --> G[Evidence bundle]
-    G --> H[LLM decision + structured memo]
-    H --> I[Policy validator]
-    I --> J{Policy conflict?}
-    J -- Yes --> K[Revise or override final decision]
-    J -- No --> L[Final launch memo]
+    A["User input<br/>question or CSV"] --> B["Route task<br/>rule-based"]
+    B --> C["Plan tools<br/>rule-based"]
+    C --> D{"CSV needed?"}
+    D -- "Yes" --> E["Run stats tools<br/>SRM, lift, segments"]
+    D -- "No" --> F["Retrieve playbook<br/>hybrid search"]
+    E --> F
+    F --> G["Build evidence<br/>facts + chunks"]
+    G --> H["Generate memo<br/>LLM"]
+    H --> I["Validate policy<br/>deterministic rules"]
+    I --> J{"Policy conflict?"}
+    J -- "Yes" --> K["Revise final<br/>decision"]
+    J -- "No" --> L["Final memo"]
     K --> L
-    L --> M[Telemetry logs]
-    M --> N[Custom eval + Ragas eval]
-    N --> O[Failure inspection]
-    O --> P[Playbook / retrieval / prompt iteration]
+    L --> M["Log trace"]
+    M --> N["Evaluate<br/>custom + Ragas"]
+    N --> O["Inspect failures"]
+    O --> P["Improve<br/>playbook/retrieval/prompt"]
     P --> F
 ```
 
-The graph is bounded by design. It is not an open-ended autonomous agent. It classifies the task, plans tools, retrieves playbook evidence, creates a structured decision, validates hard policy constraints, and emits an auditable memo.
+The workflow is agentic because it routes tasks, chooses from available tools, retrieves external knowledge, combines tool outputs with retrieved evidence, generates a structured decision memo, validates the decision, and evaluates the resulting trace. It is bounded because the graph controls the allowed steps, the tool set is fixed, and hard launch constraints are checked by deterministic policy rules rather than left entirely to the LLM.
+
+In the current implementation:
+
+- task routing and tool planning are rule-based;
+- CSV analysis is handled by deterministic statistical tools;
+- playbook lookup is handled by hybrid retrieval;
+- memo generation and the proposed decision are handled by the LLM;
+- final decision safety is checked by the policy validator;
+- quality is measured by custom eval, Ragas, and failure inspection.
+
+This is best described as a bounded AI agent or agentic RAG workflow, not a fully autonomous open-ended agent.
 
 ## What This Project Demonstrates
 
