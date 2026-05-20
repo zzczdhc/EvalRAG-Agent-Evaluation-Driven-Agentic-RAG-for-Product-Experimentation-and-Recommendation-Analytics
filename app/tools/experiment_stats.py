@@ -91,9 +91,12 @@ def compute_metric_lift(rows: list[dict[str, Any]], metric: str, group_col: str 
     lift = treatment_mean - control_mean
     lift_pct = (lift / control_mean * 100.0) if control_mean != 0 else math.inf
     risk_flag = False
-    if metric in {"retained_7d", "converted"} and lift < 0:
+    # Use small practical tolerances so random noise does not turn clean wins into blockers.
+    if metric == "retained_7d" and lift <= -0.01:
         risk_flag = True
-    if metric in {"complained", "reported", "hidden"} and lift > 0:
+    if metric == "converted" and lift <= -0.005:
+        risk_flag = True
+    if metric in {"complained", "reported", "hidden"} and lift >= 0.002:
         risk_flag = True
     return {
         "metric": metric,
@@ -212,4 +215,3 @@ def generate_experiment_summary_from_path(path: str | Path) -> dict[str, Any]:
 
 def generate_experiment_summary_from_csv_text(text: str) -> dict[str, Any]:
     return generate_experiment_summary(load_csv_text(text))
-

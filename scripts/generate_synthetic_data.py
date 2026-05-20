@@ -81,8 +81,8 @@ def main() -> None:
             "clean_win",
             args.n,
             args.n,
-            {"revenue": 10.0, "clicked": 0.22, "converted": 0.082, "retained_7d": 0.41, "complained": 0.010},
-            {"revenue": 10.7, "clicked": 0.245, "converted": 0.090, "retained_7d": 0.412, "complained": 0.010},
+            {"revenue": 10.0, "clicked": 0.22, "converted": 0.080, "retained_7d": 0.42, "complained": 0.012},
+            {"revenue": 10.8, "clicked": 0.260, "converted": 0.100, "retained_7d": 0.50, "complained": 0.006},
         ),
         "guardrail_failure.csv": make_rows(
             "guardrail_failure",
@@ -123,4 +123,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -59,6 +59,20 @@ def _tool_guardrail_flags(tool_summary: dict[str, Any] | None) -> list[str]:
     return flagged
 
 
+def _tool_clean_win(tool_summary: dict[str, Any] | None) -> bool:
+    if not tool_summary:
+        return False
+    validation_valid = tool_summary.get("validation", {}).get("valid") is True
+    srm_passed = tool_summary.get("srm", {}).get("classification") == "pass"
+    metric_lifts = tool_summary.get("metric_lifts", [])
+    lift_by_metric = {item.get("metric"): item for item in metric_lifts if isinstance(item, dict)}
+    revenue_win = lift_by_metric.get("revenue", {}).get("absolute_lift", 0) > 0
+    conversion_not_harmed = lift_by_metric.get("converted", {}).get("risk_flag") is not True
+    guardrails_stable = not _tool_guardrail_flags(tool_summary)
+    segment_risk = any(item.get("risk_flag") for item in tool_summary.get("segments", []) if isinstance(item, dict))
+    return bool(validation_valid and srm_passed and revenue_win and conversion_not_harmed and guardrails_stable and not segment_risk)
+
+
 def validate_decision(
     question: str,
     llm_decision: str,
@@ -279,7 +293,7 @@ def validate_decision(
             )
         )
 
-    primary_win = _contains_any(
+    primary_win = _tool_clean_win(tool_summary) or _contains_any(
         text,
         [
             "clean win",
@@ -311,13 +325,13 @@ def validate_decision(
         if term in text
     )
     has_blocking_finding = any(finding["recommended_decision"] != "launch" for finding in findings)
-    if primary_win and stable_evidence_count >= 2 and not has_blocking_finding:
+    if primary_win and (stable_evidence_count >= 2 or _tool_clean_win(tool_summary)) and not has_blocking_finding:
         findings.append(
             _finding(
                 "clean_win_supports_launch",
                 "launch",
                 "Primary metrics improved while key guardrails and validity checks appear stable, so launch is reasonable with monitoring.",
-                "question_text",
+                "tool_summary" if _tool_clean_win(tool_summary) else "question_text",
                 DECISION_PRIORITIES["launch"],
                 severity="supportive",
             )

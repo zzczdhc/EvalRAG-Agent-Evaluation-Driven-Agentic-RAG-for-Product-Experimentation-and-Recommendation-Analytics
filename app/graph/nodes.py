@@ -142,6 +142,75 @@ def _deterministic_memo(
 """
 
 
+def _policy_reason(policy_validation: dict[str, Any], final_decision: str) -> str | None:
+    for finding in policy_validation.get("policy_findings", []):
+        if finding.get("recommended_decision") == final_decision:
+            return str(finding.get("reason", "")).strip() or None
+    return None
+
+
+def _required_next_steps_for_decision(decision: str) -> list[str]:
+    if decision == "do_not_trust_result":
+        return [
+            "Investigate assignment, exposure logging, and eligibility filters.",
+            "Re-run the experiment after fixing validity issues.",
+        ]
+    if decision == "use_did_or_quasi_experiment":
+        return [
+            "Define an appropriate quasi-experimental design.",
+            "Check pre-trends before making causal claims.",
+        ]
+    if decision == "partial_rollout":
+        return [
+            "Isolate the harmed segment and inspect segment-specific evidence.",
+            "Consider a constrained rollout where harm is not present.",
+        ]
+    if decision == "launch":
+        return [
+            "Confirm monitoring and rollback conditions.",
+            "Track guardrails after rollout.",
+        ]
+    return [
+        "Review guardrails, segment effects, and statistical reliability.",
+        "Collect missing evidence before deciding on full launch.",
+    ]
+
+
+def _decision_reason(decision: str) -> str:
+    if decision == "do_not_trust_result":
+        return "Sample ratio mismatch or experiment validity failure makes the measured lift unreliable."
+    if decision == "use_did_or_quasi_experiment":
+        return "The rollout is not randomized, so simple A/B causal claims should be avoided."
+    if decision == "partial_rollout":
+        return "An important segment may be harmed even if the aggregate result looks positive."
+    if decision == "do_not_launch":
+        return "The evidence indicates material product or business harm that should block launch."
+    if decision == "launch":
+        return "The available evidence supports launch, with normal monitoring and rollback readiness."
+    return "The evidence is not strong enough for an unqualified launch recommendation."
+
+
+def _tool_clean_win(tool_summary: dict[str, Any] | None) -> bool:
+    if not tool_summary:
+        return False
+    if tool_summary.get("validation", {}).get("valid") is not True:
+        return False
+    if tool_summary.get("srm", {}).get("classification") != "pass":
+        return False
+    metric_lifts = [item for item in tool_summary.get("metric_lifts", []) if isinstance(item, dict)]
+    by_metric = {item.get("metric"): item for item in metric_lifts}
+    if by_metric.get("revenue", {}).get("absolute_lift", 0) <= 0:
+        return False
+    if by_metric.get("converted", {}).get("risk_flag") is True:
+        return False
+    guardrail_risk = any(
+        item.get("metric") in {"retained_7d", "complained", "reported", "hidden"} and item.get("risk_flag")
+        for item in metric_lifts
+    )
+    segment_risk = any(item.get("risk_flag") for item in tool_summary.get("segments", []) if isinstance(item, dict))
+    return not guardrail_risk and not segment_risk
+
+
 def _build_selected_metrics(metrics: dict[str, list[str]]) -> list[str]:
     return [
         metric
@@ -520,19 +589,23 @@ class GraphNodes:
         if "sample_ratio_mismatch_failed" in validity_flags:
             decision = "do_not_trust_result"
             confidence = 0.98
-            primary_reason = "Sample ratio mismatch or experiment validity failure makes the measured lift unreliable."
+            primary_reason = _decision_reason(decision)
         elif "non_random_rollout_detected" in validity_flags:
             decision = "use_did_or_quasi_experiment"
             confidence = 0.97
-            primary_reason = "The rollout is not randomized, so simple A/B causal claims should be avoided."
+            primary_reason = _decision_reason(decision)
         elif segment_flags:
             decision = "partial_rollout"
             confidence = 0.82
-            primary_reason = "An important segment may be harmed even if the aggregate result looks positive."
+            primary_reason = _decision_reason(decision)
         elif guardrail_flags:
             decision = "investigate_further"
             confidence = 0.86
             primary_reason = "A guardrail appears at risk, so a full launch should be blocked until the harm is understood."
+        elif _tool_clean_win(tool_summary):
+            decision = "launch"
+            confidence = 0.86
+            primary_reason = "Tool diagnostics show a clean win: validity checks pass, revenue improves, and tracked guardrails do not show risk flags."
         elif _contains_any(
             question_text,
             [
@@ -557,32 +630,7 @@ class GraphNodes:
             [item.get("source", "unknown") for item in state.get("retrieved_chunks", [])[:3]]
         )
         blocking_risks = validity_flags + guardrail_flags + segment_flags
-        required_next_steps = []
-        if decision == "do_not_trust_result":
-            required_next_steps = [
-                "Investigate assignment, exposure logging, and eligibility filters.",
-                "Re-run the experiment after fixing validity issues.",
-            ]
-        elif decision == "use_did_or_quasi_experiment":
-            required_next_steps = [
-                "Define an appropriate quasi-experimental design.",
-                "Check pre-trends before making causal claims.",
-            ]
-        elif decision == "partial_rollout":
-            required_next_steps = [
-                "Isolate the harmed segment and inspect segment-specific evidence.",
-                "Consider a constrained rollout where harm is not present.",
-            ]
-        elif decision == "investigate_further":
-            required_next_steps = [
-                "Review guardrails, segment effects, and statistical reliability.",
-                "Collect missing evidence before deciding on full launch.",
-            ]
-        else:
-            required_next_steps = [
-                "Confirm monitoring and rollback conditions.",
-                "Track guardrails after rollout.",
-            ]
+        required_next_steps = _required_next_steps_for_decision(decision)
 
         decision_json = {
             "decision": decision,
@@ -632,9 +680,8 @@ class GraphNodes:
         policy_validation = state.get("policy_validation") or {}
         revised_decision = str(policy_validation.get("final_decision", decision_json.get("decision", "unknown")))
         decision_json["decision"] = revised_decision
-        decision_json["primary_reason"] = (
-            f"{decision_json.get('primary_reason', '').rstrip()} Policy validation required decision alignment."
-        ).strip()
+        decision_json["primary_reason"] = _policy_reason(policy_validation, revised_decision) or _decision_reason(revised_decision)
+        decision_json["required_next_steps"] = _required_next_steps_for_decision(revised_decision)
         supporting = list(decision_json.get("supporting_evidence", []))
         for finding in policy_validation.get("policy_findings", [])[:3]:
             supporting.append(f"{finding['policy_id']}->{finding['recommended_decision']}")
