@@ -177,6 +177,8 @@ cd /Users/alex_z/Documents/EvalRAG-Agent
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+# Optional: install heavier local evaluation/chunking dependencies for Ragas and semantic chunking.
+python -m pip install -r requirements-dev.txt
 python scripts/build_index.py
 ```
 
