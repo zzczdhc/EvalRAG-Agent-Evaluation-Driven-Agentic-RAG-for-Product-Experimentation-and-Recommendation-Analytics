@@ -8,9 +8,9 @@
       "entrypoint": "api/index.py",
       "routePrefix": "/server",
       "includeFiles": [
-        "app/**",
-        "data/playbook/**",
-        "api/**"
+        "../app/**",
+        "../data/playbook/**",
+        "./**"
       ]
     }
   }
