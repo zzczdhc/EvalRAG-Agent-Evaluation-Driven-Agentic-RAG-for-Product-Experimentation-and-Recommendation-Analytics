@@ -11,14 +11,18 @@ import type { AnalysisHistoryItem, AnalysisResult } from "@/lib/types";
 
 export function AnalyticsWorkspace() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [selectedCorpusIds, setSelectedCorpusIds] = useState<string[]>(corpora.map((corpus) => corpus.id));
+  const [selectedCorpusIds, setSelectedCorpusIds] = useState<string[]>(["all-playbooks"]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [historyItems, setHistoryItems] = useState<AnalysisHistoryItem[]>([]);
 
   function toggleCorpus(id: string) {
-    setSelectedCorpusIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
-    );
+    setSelectedCorpusIds((current) => {
+      if (id === "all-playbooks") {
+        return current.includes(id) ? [] : [id];
+      }
+      const withoutAll = current.filter((item) => item !== "all-playbooks");
+      return withoutAll.includes(id) ? withoutAll.filter((item) => item !== id) : [...withoutAll, id];
+    });
   }
 
   function recordHistory(question: string, analysisResult: AnalysisResult) {

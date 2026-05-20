@@ -21,7 +21,7 @@ type BackendResponse = {
   trace?: Record<string, unknown>;
 };
 
-const BACKEND_URL = process.env.EVALRAG_BACKEND_URL ?? "http://127.0.0.1:8000";
+const BACKEND_URL = process.env.EVALRAG_BACKEND_URL ?? process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
 
 function asNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;

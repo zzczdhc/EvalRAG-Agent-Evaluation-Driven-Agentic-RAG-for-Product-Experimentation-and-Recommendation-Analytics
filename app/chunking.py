@@ -10,8 +10,6 @@ from pathlib import Path
 from typing import Iterable
 
 from langchain_core.documents import Document
-from langchain_experimental.text_splitter import SemanticChunker
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
 
@@ -89,6 +87,8 @@ def _section_path_from_metadata(source: str, metadata: dict[str, str]) -> list[s
 
 @lru_cache(maxsize=4)
 def _load_semantic_embeddings(model_name: str, device: str, offline: bool):
+    from langchain_huggingface import HuggingFaceEmbeddings
+
     model_kwargs = {"device": device}
     if offline:
         model_kwargs["local_files_only"] = True
@@ -130,6 +130,8 @@ def _semantic_split_documents(
         return _recursive_split_documents(doc, chunk_size=chunk_size, overlap=overlap)
 
     try:
+        from langchain_experimental.text_splitter import SemanticChunker
+
         embeddings = _load_semantic_embeddings(semantic_model, semantic_device, semantic_offline)
         splitter = SemanticChunker(
             embeddings=embeddings,

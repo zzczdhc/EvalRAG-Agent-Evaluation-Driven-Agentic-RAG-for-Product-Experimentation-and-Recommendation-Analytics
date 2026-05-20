@@ -2,6 +2,25 @@ import type { AnalysisHistoryItem, AnalysisResult, Corpus } from "./types";
 
 export const corpora: Corpus[] = [
   {
+    id: "all-playbooks",
+    name: "All Playbooks",
+    description: "Use every markdown playbook in the current EvalRAG knowledge base.",
+    documentCount: 10,
+    sources: [
+      "ab_testing.md",
+      "ads_experiments.md",
+      "did_policy_analysis.md",
+      "experiment_telemetry.md",
+      "guardrail_metrics.md",
+      "launch_decision.md",
+      "marketplace_metrics.md",
+      "recommendation_experiments.md",
+      "sample_ratio_mismatch.md",
+      "segment_analysis.md",
+    ],
+    status: "ready",
+  },
+  {
     id: "product-experimentation",
     name: "Product Experimentation Playbook",
     description: "A/B testing, primary metrics, trade-offs, and launch readiness.",
