@@ -5,12 +5,12 @@
       "routePrefix": "/"
     },
     "backend": {
-      "entrypoint": "api/index.py",
+      "entrypoint": "server.py",
       "routePrefix": "/server",
       "includeFiles": [
-        "../app/**",
-        "../data/playbook/**",
-        "./**"
+        "app/**",
+        "data/playbook/**",
+        "server.py"
       ]
     }
   }
