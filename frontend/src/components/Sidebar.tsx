@@ -22,7 +22,7 @@ type SidebarProps = {
 export function Sidebar({ selectedCorpusIds, historyItems, onToggleCorpus, onNewAnalysis }: SidebarProps) {
   return (
     <aside className="hidden h-screen w-[310px] shrink-0 border-r border-white/70 bg-white/56 px-4 py-5 shadow-soft backdrop-blur-glass lg:block">
-      <div className="flex h-full flex-col gap-6">
+      <div className="flex h-full flex-col gap-5">
         <div className="rounded-[28px] border border-white/80 bg-white/64 p-4 shadow-soft">
           <div className="flex items-center gap-3">
             <div className="grid h-11 w-11 place-items-center rounded-2xl bg-ink text-white shadow-soft">
@@ -43,7 +43,7 @@ export function Sidebar({ selectedCorpusIds, historyItems, onToggleCorpus, onNew
           </button>
         </div>
 
-        <section className="space-y-3">
+        <section className="space-y-2.5">
           <div className="flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-graphite">
             <History size={14} />
             History
@@ -75,7 +75,7 @@ export function Sidebar({ selectedCorpusIds, historyItems, onToggleCorpus, onNew
           </div>
         </section>
 
-        <section className="min-h-0 flex-1 space-y-3 overflow-auto pr-1">
+        <section className="min-h-0 flex-1 space-y-2.5 overflow-auto pr-1">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-graphite">
               <BookOpen size={14} />
@@ -85,7 +85,7 @@ export function Sidebar({ selectedCorpusIds, historyItems, onToggleCorpus, onNew
               {selectedCorpusIds.length}/{corpora.length}
             </span>
           </div>
-          <p className="px-1 text-xs leading-5 text-graphite">
+          <p className="px-1 text-[11px] leading-4 text-graphite">
             Default is all scopes. Uncheck one only when you want retrieval to ignore that document group.
           </p>
           <div className="space-y-2">

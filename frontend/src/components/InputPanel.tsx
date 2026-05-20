@@ -18,7 +18,8 @@ export function InputPanel({ selectedCorpusIds, onResult, onLoadingChange, onQue
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const canSubmit = question.trim().length > 2 && selectedCorpusIds.length > 0 && !isLoading;
+  const hasQuestion = question.trim().length > 0;
+  const canSubmit = hasQuestion && selectedCorpusIds.length > 0 && !isLoading;
   const fileStatus = useMemo(() => (file ? `${file.name} · ${formatFileSize(file.size)}` : null), [file]);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -111,7 +112,7 @@ export function InputPanel({ selectedCorpusIds, onResult, onLoadingChange, onQue
           <button
             type="submit"
             disabled={!canSubmit}
-            title="Analyze experiment"
+            title={hasQuestion ? "Analyze experiment" : "Enter a question first"}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-black disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
           >
             {isLoading ? <Loader2 className="animate-spin" size={16} /> : <ArrowUp size={17} />}
