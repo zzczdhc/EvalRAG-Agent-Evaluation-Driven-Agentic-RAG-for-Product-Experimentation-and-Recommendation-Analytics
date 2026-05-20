@@ -7,7 +7,11 @@
     "backend": {
       "entrypoint": "api/index.py",
       "routePrefix": "/server",
-      "includeFiles": "app/**,data/playbook/**,api/**"
+      "includeFiles": [
+        "app/**",
+        "data/playbook/**",
+        "api/**"
+      ]
     }
   }
 }
