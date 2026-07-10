@@ -90,6 +90,17 @@ def compute_metric_lift(rows: list[dict[str, Any]], metric: str, group_col: str 
     treatment_mean = mean(treatment)
     lift = treatment_mean - control_mean
     lift_pct = (lift / control_mean * 100.0) if control_mean != 0 else math.inf
+    control_var = variance(control) if len(control) > 1 else 0.0
+    treatment_var = variance(treatment) if len(treatment) > 1 else 0.0
+    standard_error = math.sqrt(control_var / len(control) + treatment_var / len(treatment))
+    inference_status = "ok"
+    if standard_error == 0 and lift != 0:
+        ci_lower = None
+        ci_upper = None
+        inference_status = "degenerate_zero_variance"
+    else:
+        ci_lower = lift - 1.96 * standard_error
+        ci_upper = lift + 1.96 * standard_error
     risk_flag = False
     # Use small practical tolerances so random noise does not turn clean wins into blockers.
     if metric == "retained_7d" and lift <= -0.01:
@@ -106,6 +117,10 @@ def compute_metric_lift(rows: list[dict[str, Any]], metric: str, group_col: str 
         "treatment_mean": round(treatment_mean, 6),
         "absolute_lift": round(lift, 6),
         "lift_pct": round(lift_pct, 4),
+        "standard_error": round(standard_error, 6),
+        "ci_lower": round(ci_lower, 6) if ci_lower is not None else None,
+        "ci_upper": round(ci_upper, 6) if ci_upper is not None else None,
+        "inference_status": inference_status,
         "risk_flag": risk_flag,
     }
 
@@ -120,16 +135,24 @@ def run_t_test(rows: list[dict[str, Any]], metric: str, group_col: str = "group"
     treatment_var = variance(treatment)
     standard_error = math.sqrt(control_var / len(control) + treatment_var / len(treatment))
     if standard_error == 0:
-        z_score = 0.0
-        p_value = 1.0
+        if mean(treatment) == mean(control):
+            z_score: float | None = 0.0
+            p_value: float | None = 1.0
+            inference_status = "constant_equal_groups"
+        else:
+            z_score = None
+            p_value = None
+            inference_status = "degenerate_zero_variance"
     else:
         z_score = (mean(treatment) - mean(control)) / standard_error
         p_value = _two_sided_normal_p(z_score)
+        inference_status = "ok"
     return {
         "metric": metric,
         "test": "welch_t_approx_normal",
-        "statistic": round(z_score, 6),
-        "p_value": round(p_value, 8),
+        "statistic": round(z_score, 6) if z_score is not None else None,
+        "p_value": round(p_value, 8) if p_value is not None else None,
+        "inference_status": inference_status,
         "note": "Uses a normal approximation to keep the baseline dependency-light.",
     }
 
@@ -170,7 +193,10 @@ def run_segment_analysis(
     for segment in segments:
         segment_rows = [row for row in rows if str(row.get(segment_col, "")).strip() == segment]
         grouped = _group_rows(segment_rows, group_col=group_col)
-        if len(grouped.get("control", [])) < min_n or len(grouped.get("treatment", [])) < min_n:
+        if (
+            len(_float_values(grouped.get("control", []), metric)) < min_n
+            or len(_float_values(grouped.get("treatment", []), metric)) < min_n
+        ):
             continue
         summary = compute_metric_lift(segment_rows, metric, group_col=group_col)
         summary["segment"] = segment
@@ -197,7 +223,7 @@ def generate_experiment_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
             tests.append(run_t_test(rows, metric))
     segments: list[dict[str, Any]] = []
     if "segment" in validation.get("columns", []) and selected_metrics:
-        for metric in selected_metrics[:3]:
+        for metric in selected_metrics:
             segments.extend(run_segment_analysis(rows, metric))
     return {
         "validation": validation,

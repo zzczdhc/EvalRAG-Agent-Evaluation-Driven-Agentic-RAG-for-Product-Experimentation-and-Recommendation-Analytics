@@ -195,11 +195,26 @@ def _tool_clean_win(tool_summary: dict[str, Any] | None) -> bool:
         return False
     if tool_summary.get("validation", {}).get("valid") is not True:
         return False
-    if tool_summary.get("srm", {}).get("classification") != "pass":
+    srm = tool_summary.get("srm")
+    if not isinstance(srm, dict) or srm.get("classification") != "pass":
         return False
     metric_lifts = [item for item in tool_summary.get("metric_lifts", []) if isinstance(item, dict)]
     by_metric = {item.get("metric"): item for item in metric_lifts}
-    if by_metric.get("revenue", {}).get("absolute_lift", 0) <= 0:
+    tests = [item for item in tool_summary.get("tests", []) if isinstance(item, dict)]
+    tests_by_metric = {item.get("metric"): item for item in tests}
+    required_metrics = {"revenue", "converted", "retained_7d", "complained"}
+    if not required_metrics.issubset(by_metric):
+        return False
+    revenue = by_metric.get("revenue", {})
+    revenue_test = tests_by_metric.get("revenue", {})
+    revenue_lift = revenue.get("absolute_lift")
+    revenue_ci_lower = revenue.get("ci_lower")
+    revenue_p_value = revenue_test.get("p_value")
+    if not isinstance(revenue_lift, (int, float)) or revenue_lift <= 0:
+        return False
+    if not isinstance(revenue_ci_lower, (int, float)) or revenue_ci_lower <= 0:
+        return False
+    if not isinstance(revenue_p_value, (int, float)) or float(revenue_p_value) >= 0.05:
         return False
     if by_metric.get("converted", {}).get("risk_flag") is True:
         return False
@@ -207,8 +222,11 @@ def _tool_clean_win(tool_summary: dict[str, Any] | None) -> bool:
         item.get("metric") in {"retained_7d", "complained", "reported", "hidden"} and item.get("risk_flag")
         for item in metric_lifts
     )
-    segment_risk = any(item.get("risk_flag") for item in tool_summary.get("segments", []) if isinstance(item, dict))
-    return not guardrail_risk and not segment_risk
+    segments = [item for item in tool_summary.get("segments", []) if isinstance(item, dict)]
+    segment_risk = any(item.get("risk_flag") for item in segments)
+    validation_columns = set(tool_summary.get("validation", {}).get("columns", []))
+    segment_coverage = "segment" not in validation_columns or bool(segments)
+    return not guardrail_risk and not segment_risk and segment_coverage
 
 
 def _build_selected_metrics(metrics: dict[str, list[str]]) -> list[str]:
@@ -395,7 +413,7 @@ class GraphNodes:
                 tool_results["run_significance_tests"] = tests
             if "run_segment_analysis" in required_tools and "segment" in validation.get("columns", []):
                 segments: list[dict[str, Any]] = []
-                for metric in selected_metrics[:3]:
+                for metric in selected_metrics:
                     segments.extend(run_segment_analysis(rows, metric))
                 summary["segments"] = segments
                 tool_results["run_segment_analysis"] = segments
@@ -460,7 +478,8 @@ class GraphNodes:
 
         if tool_summary.get("validation", {}).get("valid") is False:
             validity_flags.extend(tool_summary["validation"].get("errors", []))
-        if tool_summary.get("srm", {}).get("classification") == "fail":
+        srm = tool_summary.get("srm")
+        if isinstance(srm, dict) and srm.get("classification") == "fail":
             validity_flags.append("sample_ratio_mismatch_failed")
         if state.get("task_type") == "quasi_experiment":
             validity_flags.append("non_random_rollout_detected")
@@ -513,6 +532,7 @@ class GraphNodes:
     def evidence_checker_node(self, state: ExperimentGraphState) -> ExperimentGraphState:
         evidence_bundle = state.get("evidence_bundle") or {}
         validity_flags = set(evidence_bundle.get("validity_flags", []))
+        hard_validity_flags = validity_flags - {"non_random_rollout_detected"}
         missing_information = set(evidence_bundle.get("missing_information", []))
         guardrail_flags = set(evidence_bundle.get("guardrail_flags", []))
         retrieved_chunks = state.get("retrieved_chunks", [])
@@ -520,9 +540,9 @@ class GraphNodes:
         selected_sources = state.get("selected_sources", [])
         reasons: list[str] = []
 
-        if "sample_ratio_mismatch_failed" in validity_flags:
+        if hard_validity_flags:
             sufficiency = "sufficient"
-            reasons.append("validity failure is sufficient to block trusting the result")
+            reasons.append("data or experiment validity failure is sufficient to block trusting the result")
         elif "non_random_rollout_detected" in validity_flags:
             sufficiency = "sufficient"
             reasons.append("non-random rollout is sufficient to require quasi-experimental analysis")
@@ -586,7 +606,9 @@ class GraphNodes:
         segment_flags = evidence_bundle.get("segment_flags", [])
         question_text = _normalize_text(state["question"])
 
-        if "sample_ratio_mismatch_failed" in validity_flags:
+        hard_validity_flags = [flag for flag in validity_flags if flag != "non_random_rollout_detected"]
+
+        if hard_validity_flags:
             decision = "do_not_trust_result"
             confidence = 0.98
             primary_reason = _decision_reason(decision)

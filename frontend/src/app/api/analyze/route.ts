@@ -1,6 +1,27 @@
 import { NextResponse } from "next/server";
-import { mockResult } from "@/lib/mock-data";
-import type { AnalysisResult, DiagnosticResult, Recommendation, RetrievedContext } from "@/lib/types";
+import type {
+  AnalysisResult,
+  DecisionCode,
+  MetricDiagnostic,
+  PolicyFinding,
+  RetrievedContext,
+  SegmentDiagnostic,
+} from "@/lib/types";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const RATE_LIMIT_REQUESTS = 12;
+const DECISIONS = new Set<DecisionCode>([
+  "launch",
+  "do_not_launch",
+  "partial_rollout",
+  "investigate_further",
+  "do_not_trust_result",
+  "use_did_or_quasi_experiment",
+]);
 
 type BackendChunk = {
   source?: string;
@@ -13,38 +34,68 @@ type BackendChunk = {
 type BackendResponse = {
   answer?: string;
   decision?: string;
+  llm_decision?: string;
+  policy_decision?: string;
   final_decision?: string;
   retrieved_chunks?: BackendChunk[];
   evaluation?: Record<string, unknown>;
   policy_validation?: Record<string, unknown>;
   tool_summary?: Record<string, unknown>;
   trace?: Record<string, unknown>;
+  latency_seconds?: number;
+  model?: string;
+  generator_backend?: string;
+  generator_error?: string | null;
 };
 
-const BACKEND_URL = process.env.EVALRAG_BACKEND_URL ?? process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
+type RateLimitEntry = { count: number; resetAt: number };
 
-function asNumber(value: unknown, fallback: number) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+const globalRateLimit = globalThis as typeof globalThis & {
+  __evalragRateLimit?: Map<string, RateLimitEntry>;
+};
+const rateLimitStore = globalRateLimit.__evalragRateLimit ?? new Map<string, RateLimitEntry>();
+globalRateLimit.__evalragRateLimit = rateLimitStore;
+
+class BackendHttpError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = "BackendHttpError";
+  }
 }
 
-function optionalNumber(value: unknown) {
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : undefined;
+}
+
+function isRecord(value: Record<string, unknown> | undefined): value is Record<string, unknown> {
+  return value !== undefined;
+}
+
+function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function mapDecision(decision?: string): Recommendation {
-  switch (decision) {
-    case "launch":
-      return "Launch";
-    case "do_not_launch":
-    case "do_not_trust_result":
-      return "Do Not Launch";
-    case "partial_rollout":
-      return "Launch with Guardrails";
-    case "investigate_further":
-    case "use_did_or_quasi_experiment":
-    default:
-      return "Needs More Investigation";
-  }
+function asBoolean(value: unknown): boolean {
+  return value === true;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function asDecision(value: unknown): DecisionCode | null {
+  return typeof value === "string" && DECISIONS.has(value as DecisionCode) ? (value as DecisionCode) : null;
+}
+
+function requireDecision(value: unknown, field: string): DecisionCode {
+  const decision = asDecision(value);
+  if (!decision) throw new Error(`The live service returned an invalid ${field}.`);
+  return decision;
+}
+
+function optionalDecision(value: unknown, field: string): DecisionCode | null {
+  if (value === undefined || value === null || value === "") return null;
+  return requireDecision(value, field);
 }
 
 function extractSection(markdown: string, heading: string) {
@@ -58,184 +109,319 @@ function listFromSection(section: string) {
     .split("\n")
     .map((line) => line.trim().replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, ""))
     .filter(Boolean)
-    .slice(0, 6);
+    .slice(0, 8);
 }
 
-function retrievedContext(chunks: BackendChunk[] = []): RetrievedContext[] {
-  return chunks.slice(0, 5).map((chunk) => ({
-    source: chunk.source ?? "unknown",
-    snippet: chunk.text_preview ?? chunk.text?.slice(0, 240) ?? "Retrieved playbook context.",
-    score: asNumber(chunk.score ?? chunk.similarity_score, 0),
-  }));
+function mapRetrievedContext(chunks: BackendChunk[] = []): RetrievedContext[] {
+  return chunks
+    .map((chunk) => ({
+      source: chunk.source ?? "unknown source",
+      snippet: chunk.text ?? chunk.text_preview ?? "",
+      score: asNumber(chunk.score ?? chunk.similarity_score) ?? 0,
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
 }
 
-function diagnosticsFromToolSummary(toolSummary?: Record<string, unknown>): DiagnosticResult[] {
-  if (!toolSummary) {
-    return [
-      { label: "Metric difference", value: "not provided", status: "watch" },
-      { label: "CSV diagnostics", value: "not run", status: "watch" },
-    ];
-  }
-
-  const diagnostics: DiagnosticResult[] = [];
-  const srm = toolSummary.srm as Record<string, unknown> | undefined;
-  if (srm?.classification) {
-    diagnostics.push({
-      label: "SRM check",
-      value: String(srm.classification),
-      status: srm.classification === "pass" ? "pass" : "risk",
-    });
-  }
-
-  const metricLifts = Array.isArray(toolSummary.metric_lifts) ? toolSummary.metric_lifts : [];
-  for (const item of metricLifts.slice(0, 3)) {
-    const metric = item as Record<string, unknown>;
-    diagnostics.push({
-      label: String(metric.metric ?? "Metric lift"),
-      value: `${asNumber(metric.lift_pct, 0).toFixed(2)}%`,
-      status: metric.risk_flag ? "risk" : "pass",
-    });
-  }
-
-  const tests = Array.isArray(toolSummary.tests) ? toolSummary.tests : [];
-  if (tests.length) {
-    const risky = tests.some((item) => asNumber((item as Record<string, unknown>).p_value, 1) < 0.05);
-    diagnostics.push({
-      label: "Significance tests",
-      value: `${tests.length} run`,
-      status: risky ? "watch" : "pass",
-    });
-  }
-
-  const segments = Array.isArray(toolSummary.segments) ? toolSummary.segments : [];
-  if (segments.length) {
-    const riskCount = segments.filter((item) => Boolean((item as Record<string, unknown>).risk_flag)).length;
-    diagnostics.push({
-      label: "Segment checks",
-      value: riskCount ? `${riskCount} risks` : `${segments.length} checked`,
-      status: riskCount ? "risk" : "pass",
-    });
-  }
-
-  return diagnostics.length ? diagnostics : mockResult.diagnostics;
-}
-
-function mapBackendResponse(data: BackendResponse): AnalysisResult {
-  const answer = data.answer ?? "";
-  const evaluation = data.evaluation ?? {};
-  const trace = data.trace ?? {};
-  const decisionJson = trace.decision_json as Record<string, unknown> | undefined;
-  const context = retrievedContext(data.retrieved_chunks ?? []);
-  const summary = extractSection(answer, "Short Answer") || mockResult.summary;
-  const evidence = listFromSection(extractSection(answer, "Reasoning"));
-  const risks = listFromSection(extractSection(answer, "Risks / Caveats"));
-  const nextActions = listFromSection(extractSection(answer, "Suggested Next Steps"));
-
+function mapValidation(toolSummary?: Record<string, unknown>) {
+  const validation = record(toolSummary?.validation);
+  if (!validation) return null;
+  const rawCounts = record(validation.group_counts) ?? {};
+  const groupCounts = Object.fromEntries(
+    Object.entries(rawCounts)
+      .map(([key, value]) => [key, asNumber(value)])
+      .filter((entry): entry is [string, number] => entry[1] !== null),
+  );
   return {
-    recommendation: mapDecision(data.final_decision ?? data.decision),
-    summary,
-    rawAnswer: answer,
-    evidence: evidence.length ? evidence : context.map((item) => `${item.source}: ${item.snippet}`),
-    risks: risks.length ? risks : mockResult.risks,
-    uncertainty:
-      "Live backend response. Use retrieved context, diagnostics, and policy validation to inspect whether the recommendation is sufficiently supported.",
-    nextActions: nextActions.length ? nextActions : mockResult.nextActions,
-    retrievedContext: context.length ? context : mockResult.retrievedContext,
-    diagnostics: diagnosticsFromToolSummary(data.tool_summary),
-    evaluation: {
-      faithfulness: optionalNumber(evaluation.faithfulness),
-      contextPrecision: optionalNumber(evaluation.source_precision_at_k ?? evaluation.source_match_rate),
-      answerRelevance: optionalNumber(evaluation.concept_coverage),
-      decisionConfidence: optionalNumber(decisionJson?.confidence),
-    },
-    trace: mapTrace(data),
+    valid: validation.valid === true,
+    rowCount: asNumber(validation.row_count),
+    columns: stringList(validation.columns),
+    errors: stringList(validation.errors),
+    warnings: stringList(validation.warnings),
+    groupCounts,
   };
 }
 
-function stringList(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(String) : [];
+function mapSrm(toolSummary?: Record<string, unknown>) {
+  const srm = record(toolSummary?.srm);
+  if (!srm) return null;
+  const classification: "pass" | "fail" | "not_run" =
+    srm.classification === "pass" || srm.classification === "fail" ? srm.classification : "not_run";
+  return {
+    classification,
+    controlN: asNumber(srm.control_n),
+    treatmentN: asNumber(srm.treatment_n),
+    pValue: asNumber(srm.p_value),
+    alpha: asNumber(srm.alpha),
+    reason: typeof srm.reason === "string" ? srm.reason : undefined,
+  };
+}
+
+function mapMetrics(toolSummary?: Record<string, unknown>): MetricDiagnostic[] {
+  const lifts = Array.isArray(toolSummary?.metric_lifts) ? toolSummary.metric_lifts.map(record).filter(isRecord) : [];
+  const tests = Array.isArray(toolSummary?.tests) ? toolSummary.tests.map(record).filter(isRecord) : [];
+  const testsByMetric = new Map(tests.map((item) => [String(item?.metric ?? ""), item]));
+
+  return lifts.map((item) => {
+    const metric = String(item?.metric ?? "metric");
+    const test = testsByMetric.get(metric);
+    const lift = asNumber(item?.absolute_lift);
+    const pValue = asNumber(test?.p_value);
+    const riskFlag = asBoolean(item?.risk_flag);
+    const status = riskFlag ? "risk" : lift !== null && lift > 0 && pValue !== null && pValue < 0.05 ? "positive" : "neutral";
+    return {
+      metric,
+      controlMean: asNumber(item?.control_mean),
+      treatmentMean: asNumber(item?.treatment_mean),
+      absoluteLift: lift,
+      liftPct: asNumber(item?.lift_pct),
+      ciLower: asNumber(item?.ci_lower),
+      ciUpper: asNumber(item?.ci_upper),
+      pValue,
+      riskFlag,
+      status,
+    };
+  });
+}
+
+function mapSegments(toolSummary?: Record<string, unknown>): SegmentDiagnostic[] {
+  const rawSegments = Array.isArray(toolSummary?.segments) ? toolSummary.segments.map(record).filter(isRecord) : [];
+  return rawSegments
+    .map((item) => {
+      const lift = asNumber(item?.absolute_lift);
+      const riskFlag = asBoolean(item?.risk_flag);
+      return {
+        segment: String(item?.segment ?? "unknown"),
+        metric: String(item?.metric ?? "metric"),
+        controlMean: asNumber(item?.control_mean),
+        treatmentMean: asNumber(item?.treatment_mean),
+        absoluteLift: lift,
+        liftPct: asNumber(item?.lift_pct),
+        ciLower: asNumber(item?.ci_lower),
+        ciUpper: asNumber(item?.ci_upper),
+        pValue: null,
+        riskFlag,
+        status: riskFlag ? "risk" as const : "neutral" as const,
+      };
+    })
+    .sort((a, b) => Number(b.riskFlag) - Number(a.riskFlag) || a.segment.localeCompare(b.segment));
+}
+
+function mapPolicyFindings(policyValidation: Record<string, unknown>): PolicyFinding[] {
+  const findings = Array.isArray(policyValidation.policy_findings)
+    ? policyValidation.policy_findings.map(record).filter(isRecord)
+    : [];
+  return findings.map((finding) => ({
+    policyId: String(finding?.policy_id ?? "policy_check"),
+    recommendedDecision: requireDecision(finding?.recommended_decision, "policy finding decision"),
+    reason: String(finding?.reason ?? "Policy rule applied."),
+    evidence: String(finding?.evidence ?? "unspecified"),
+    severity: typeof finding?.severity === "string" ? finding.severity : undefined,
+  }));
 }
 
 function mapTrace(data: BackendResponse) {
   const trace = data.trace ?? {};
-  const evidenceCheck = trace.evidence_check as Record<string, unknown> | undefined;
-  const policyValidation = trace.policy_validation as Record<string, unknown> | undefined;
+  const evidenceCheck = record(trace.evidence_check);
   const traceSteps = Array.isArray(trace.trace_steps)
     ? trace.trace_steps
-        .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+        .map(record)
+        .filter(isRecord)
         .map((item) => ({
-          step: typeof item.step === "string" ? item.step : "unknown",
-          status: typeof item.status === "string" ? item.status : "completed",
-          details:
-            typeof item.details === "object" && item.details !== null
-              ? (item.details as Record<string, unknown>)
-              : undefined,
+          step: typeof item?.step === "string" ? item.step : "unknown",
+          status: typeof item?.status === "string" ? item.status : "completed",
+          details: record(item?.details),
         }))
     : [];
   return {
     queryId: typeof trace.query_id === "string" ? trace.query_id : undefined,
     taskType: typeof trace.task_type === "string" ? trace.task_type : undefined,
-    agentPlan:
-      typeof trace.agent_plan === "object" && trace.agent_plan !== null
-        ? (trace.agent_plan as Record<string, unknown>)
-        : undefined,
+    agentPlan: record(trace.agent_plan),
     requiredTools: stringList(trace.required_tools),
     selectedCorpusIds: stringList(trace.selected_corpus_ids),
     selectedSources: stringList(trace.selected_sources),
     evidenceSufficiency: typeof trace.evidence_sufficiency === "string" ? trace.evidence_sufficiency : undefined,
     evidenceReasons: stringList(evidenceCheck?.reasons),
-    topRetrievalScore: asNumber(evidenceCheck?.top_score, 0),
-    policyAction: typeof policyValidation?.policy_action === "string" ? policyValidation.policy_action : undefined,
-    generatorBackend: typeof trace.generator_backend === "string" ? trace.generator_backend : undefined,
-    model: typeof trace.model === "string" ? trace.model : undefined,
+    topRetrievalScore: asNumber(evidenceCheck?.top_score) ?? undefined,
+    generatorBackend: typeof trace.generator_backend === "string" ? trace.generator_backend : data.generator_backend,
+    model: typeof trace.model === "string" ? trace.model : data.model,
     steps: traceSteps,
   };
 }
 
-async function callBackend(question: string, selectedCorpusIds: string[], csvFile: File | null) {
-  if (csvFile && csvFile.size > 0) {
-    const formData = new FormData();
-    formData.append("question", question);
-    formData.append("file", csvFile, csvFile.name);
-    formData.append("selected_corpus_ids", JSON.stringify(selectedCorpusIds));
+function mapBackendResponse(data: BackendResponse): AnalysisResult {
+  const answer = data.answer ?? "";
+  const trace = data.trace ?? {};
+  const decisionJson = record(trace.decision_json);
+  const policyValidation = data.policy_validation ?? record(trace.policy_validation) ?? {};
+  const finalDecision = requireDecision(data.final_decision ?? data.decision ?? decisionJson?.decision, "final decision");
+  const draftDecision = optionalDecision(data.llm_decision ?? decisionJson?.decision, "draft decision") ?? finalDecision;
+  const policyDecision = optionalDecision(data.policy_decision, "policy decision");
+  const context = mapRetrievedContext(data.retrieved_chunks);
+  const evidence = listFromSection(extractSection(answer, "Reasoning"));
+  const policyFindings = mapPolicyFindings(policyValidation);
+  const risks = listFromSection(extractSection(answer, "Risks / Caveats"));
+  const nextActions = listFromSection(extractSection(answer, "Suggested Next Steps"));
+  const traceResult = mapTrace(data);
+  const evaluation = data.evaluation ?? {};
+  const primaryReason = typeof decisionJson?.primary_reason === "string" ? decisionJson.primary_reason : "";
+  const policyAction: "override" | "confirm" | "none" =
+    policyValidation.policy_action === "override" || policyValidation.policy_action === "confirm"
+    ? policyValidation.policy_action
+    : "none";
 
-    const response = await fetch(`${BACKEND_URL}/analyze`, {
+  return {
+    mode: "live",
+    decision: finalDecision,
+    summary: extractSection(answer, "Short Answer") || primaryReason || "The analysis completed without a structured short answer.",
+    rawAnswer: answer,
+    evidence: evidence.length ? evidence : context.map((item) => `${item.source}: ${item.snippet}`),
+    risks: risks.length ? risks : policyFindings.map((finding) => finding.reason),
+    uncertainty: traceResult.evidenceReasons?.length
+      ? traceResult.evidenceReasons.join(" · ")
+      : data.generator_error || "No additional uncertainty statement was returned.",
+    nextActions: nextActions.length ? nextActions : stringList(decisionJson?.required_next_steps),
+    retrievedContext: context,
+    validation: mapValidation(data.tool_summary),
+    srm: mapSrm(data.tool_summary),
+    metrics: mapMetrics(data.tool_summary),
+    segments: mapSegments(data.tool_summary),
+    evaluation: {
+      faithfulness: asNumber(evaluation.faithfulness),
+      contextPrecision: asNumber(evaluation.source_precision_at_k ?? evaluation.source_match_rate),
+      answerRelevance: asNumber(evaluation.concept_coverage),
+      decisionConfidence: asNumber(decisionJson?.confidence),
+    },
+    decisionChain: {
+      draftDecision,
+      policyDecision,
+      finalDecision,
+      policyAction,
+      findings: policyFindings,
+    },
+    trace: traceResult,
+    latencySeconds: asNumber(data.latency_seconds),
+    model: data.model,
+  };
+}
+
+function backendBaseUrl(request: Request) {
+  const configured = process.env.EVALRAG_BACKEND_URL ?? process.env.BACKEND_URL;
+  if (configured) return configured.replace(/\/$/, "");
+  if (process.env.VERCEL) return `${new URL(request.url).origin}/server`;
+  return "http://127.0.0.1:8000";
+}
+
+function rateLimit(request: Request) {
+  if (process.env.NODE_ENV !== "production") return { allowed: true, retryAfter: 0 };
+  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const key = forwardedFor || request.headers.get("x-real-ip") || "unknown";
+  const now = Date.now();
+  const current = rateLimitStore.get(key);
+  if (!current || current.resetAt <= now) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true, retryAfter: 0 };
+  }
+  if (current.count >= RATE_LIMIT_REQUESTS) {
+    return { allowed: false, retryAfter: Math.max(1, Math.ceil((current.resetAt - now) / 1000)) };
+  }
+  current.count += 1;
+  return { allowed: true, retryAfter: 0 };
+}
+
+async function throwBackendError(response: Response): Promise<never> {
+  let detail = `Live analysis service returned ${response.status}.`;
+  try {
+    const payload = (await response.json()) as { detail?: unknown; error?: unknown };
+    if (typeof payload.detail === "string") detail = payload.detail;
+    else if (typeof payload.error === "string") detail = payload.error;
+  } catch {
+    // Keep the status-based fallback when the upstream body is not JSON.
+  }
+  throw new BackendHttpError(response.status, detail);
+}
+
+async function callBackend(baseUrl: string, question: string, selectedCorpusIds: string[], csvFile: File | null) {
+  if (csvFile) {
+    const payload = new FormData();
+    payload.append("question", question);
+    payload.append("file", csvFile, csvFile.name);
+    payload.append("selected_corpus_ids", JSON.stringify(selectedCorpusIds));
+    const response = await fetch(`${baseUrl}/analyze`, {
       method: "POST",
-      body: formData,
+      body: payload,
+      cache: "no-store",
+      signal: AbortSignal.timeout(55_000),
     });
-    if (!response.ok) throw new Error(`FastAPI /analyze returned ${response.status}`);
+    if (!response.ok) await throwBackendError(response);
     return (await response.json()) as BackendResponse;
   }
 
-  const response = await fetch(`${BACKEND_URL}/ask`, {
+  const response = await fetch(`${baseUrl}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, selected_corpus_ids: selectedCorpusIds }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(55_000),
   });
-  if (!response.ok) throw new Error(`FastAPI /ask returned ${response.status}`);
+  if (!response.ok) await throwBackendError(response);
   return (await response.json()) as BackendResponse;
 }
 
 export async function POST(request: Request) {
-  const formData = await request.formData();
-  const question = String(formData.get("question") ?? "").trim();
-  const selectedCorpusIds = JSON.parse(String(formData.get("selectedCorpusIds") ?? "[]")) as string[];
-  const csvFile = formData.get("csvFile") instanceof File ? (formData.get("csvFile") as File) : null;
-
-  if (!question) {
-    return NextResponse.json({ error: "question is required" }, { status: 400 });
+  const requestLimit = rateLimit(request);
+  if (!requestLimit.allowed) {
+    return NextResponse.json(
+      { mode: "error", error: "This demo has reached its short-term analysis limit. Please try again soon." },
+      { status: 429, headers: { "Retry-After": String(requestLimit.retryAfter), "Cache-Control": "no-store" } },
+    );
   }
-
   try {
-    const backendResult = await callBackend(question, selectedCorpusIds, csvFile);
-    return NextResponse.json(mapBackendResponse(backendResult));
-  } catch (error) {
-    // Keep the UI usable when the Python backend is not running. This makes frontend
-    // development independent while preserving the real integration path above.
-    return NextResponse.json({
-      ...mockResult,
-      summary: `${mockResult.summary} Mock fallback used because the FastAPI backend was not reachable.`,
-      uncertainty: error instanceof Error ? error.message : mockResult.uncertainty,
+    const formData = await request.formData();
+    const question = String(formData.get("question") ?? "").trim();
+    const rawScopes = String(formData.get("selectedCorpusIds") ?? "[]");
+    const csvFile = formData.get("csvFile") instanceof File ? (formData.get("csvFile") as File) : null;
+
+    if (question.length < 3) {
+      return NextResponse.json({ mode: "error", error: "Please enter a specific experiment question." }, { status: 400 });
+    }
+
+    let selectedCorpusIds: string[];
+    try {
+      selectedCorpusIds = stringList(JSON.parse(rawScopes));
+    } catch {
+      return NextResponse.json({ mode: "error", error: "Retrieval scope is invalid." }, { status: 400 });
+    }
+    if (!selectedCorpusIds.length) {
+      return NextResponse.json({ mode: "error", error: "Select at least one retrieval scope." }, { status: 400 });
+    }
+
+    if (csvFile) {
+      if (!csvFile.name.toLowerCase().endsWith(".csv")) {
+        return NextResponse.json({ mode: "error", error: "Only CSV experiment files are supported." }, { status: 400 });
+      }
+      if (csvFile.size > MAX_FILE_BYTES) {
+        return NextResponse.json({ mode: "error", error: "CSV exceeds the 5 MB upload limit." }, { status: 413 });
+      }
+    }
+
+    const backendResult = await callBackend(backendBaseUrl(request), question, selectedCorpusIds, csvFile);
+    return NextResponse.json(mapBackendResponse(backendResult), {
+      headers: { "Cache-Control": "no-store" },
     });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown live analysis failure.";
+    const status = error instanceof BackendHttpError && error.status >= 400 && error.status < 500 ? error.status : 502;
+    console.error("EvalRAG live analysis failed", error);
+    return NextResponse.json(
+      {
+        mode: "error",
+        error: status < 500
+          ? "The request could not be analyzed. No mock result was substituted."
+          : "The live analysis could not be completed. No mock result was substituted.",
+        detail,
+      },
+      { status, headers: { "Cache-Control": "no-store" } },
+    );
   }
 }

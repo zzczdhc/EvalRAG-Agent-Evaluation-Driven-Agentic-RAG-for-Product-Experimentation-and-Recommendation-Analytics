@@ -1,128 +1,100 @@
 "use client";
 
-import { BookOpen, Check, History, Plus, Sparkles } from "lucide-react";
-import { corpora } from "@/lib/mock-data";
+import { History, Plus, Sparkles, X } from "lucide-react";
+import { decisionMeta } from "@/lib/decisions";
 import type { AnalysisHistoryItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const recommendationTone = {
-  Launch: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  "Do Not Launch": "bg-rose-50 text-rose-700 ring-rose-200",
-  "Launch with Guardrails": "bg-blue-50 text-blue-700 ring-blue-200",
-  "Needs More Investigation": "bg-amber-50 text-amber-700 ring-amber-200",
-};
-
 type SidebarProps = {
-  selectedCorpusIds: string[];
   historyItems: AnalysisHistoryItem[];
-  onToggleCorpus: (id: string) => void;
+  activeHistoryId?: string;
+  onSelectHistory: (item: AnalysisHistoryItem) => void;
   onNewAnalysis: () => void;
+  mobile?: boolean;
+  onClose?: () => void;
 };
 
-export function Sidebar({ selectedCorpusIds, historyItems, onToggleCorpus, onNewAnalysis }: SidebarProps) {
+export function Sidebar({
+  historyItems,
+  activeHistoryId,
+  onSelectHistory,
+  onNewAnalysis,
+  mobile = false,
+  onClose,
+}: SidebarProps) {
   return (
-    <aside className="hidden h-screen w-[310px] shrink-0 border-r border-white/70 bg-white/56 px-4 py-5 shadow-soft backdrop-blur-glass lg:block">
-      <div className="flex h-full flex-col gap-5">
-        <div className="rounded-[28px] border border-white/80 bg-white/64 p-4 shadow-soft">
+    <aside className={cn(
+      "h-full w-[248px] shrink-0 border-r border-slate-200/80 bg-white/88",
+      mobile ? "block w-full border-r-0" : "hidden lg:block",
+    )}>
+      <div className="flex h-full flex-col px-4 py-5">
+        <div className="flex items-center justify-between gap-3 px-1">
           <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-ink text-white shadow-soft">
-              <Sparkles size={20} />
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-ink text-white shadow-sm">
+              <Sparkles size={17} />
             </div>
             <div>
-              <h1 className="text-xl font-semibold tracking-tight text-ink">EvalRAG</h1>
-              <p className="text-xs leading-4 text-graphite">Evaluation-Driven Product Analytics Agent</p>
+              <p className="text-sm font-semibold tracking-tight text-ink">EvalRAG</p>
+              <p className="text-[11px] text-graphite">Evidence desk</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onNewAnalysis}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-ink px-4 py-3 text-sm font-medium text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-black"
-          >
-            <Plus size={17} />
-            New analysis
-          </button>
+          {mobile ? (
+            <button type="button" onClick={onClose} className="focus-ring grid h-9 w-9 place-items-center rounded-xl text-graphite hover:bg-slate-100" aria-label="Close runs">
+              <X size={18} />
+            </button>
+          ) : null}
         </div>
 
-        <section className="space-y-2.5">
-          <div className="flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-[0.18em] text-graphite">
-            <History size={14} />
-            History
-          </div>
-          <div className="space-y-2">
-            {historyItems.length ? historyItems.map((item) => (
+        <button
+          type="button"
+          onClick={onNewAnalysis}
+          className="focus-ring mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-sm font-medium text-white transition duration-200 hover:bg-slate-800 active:scale-[0.99]"
+        >
+          <Plus size={16} />
+          New analysis
+        </button>
+
+        <div className="mt-7 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-graphite">
+          <History size={13} />
+          Session runs
+        </div>
+
+        <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+          {historyItems.length ? historyItems.map((item) => {
+            const meta = decisionMeta[item.result.decision];
+            const active = item.id === activeHistoryId;
+            return (
               <button
                 key={item.id}
-                className="w-full rounded-2xl border border-white/70 bg-white/54 p-3 text-left shadow-sm transition hover:bg-white/82"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="line-clamp-2 text-sm font-medium text-ink">{item.title}</p>
-                  <span className="shrink-0 text-[11px] text-graphite">{item.timestamp}</span>
-                </div>
-                <span
-                  className={cn(
-                    "mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-medium ring-1",
-                    recommendationTone[item.recommendation],
-                  )}
-                >
-                  {item.recommendation}
-                </span>
-              </button>
-            )) : (
-              <div className="rounded-2xl border border-white/70 bg-white/40 p-3 text-xs leading-5 text-graphite shadow-sm">
-                Session history appears after you run an analysis.
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="min-h-0 flex-1 space-y-2.5 overflow-auto pr-1">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-graphite">
-              <BookOpen size={14} />
-              Retrieval scope
-            </div>
-            <span className="rounded-full border border-white/80 bg-white/70 px-2 py-1 text-[11px] font-semibold text-graphite shadow-sm">
-              {selectedCorpusIds.length}/{corpora.length}
-            </span>
-          </div>
-          <p className="px-1 text-[11px] leading-4 text-graphite">
-            Default is all scopes. Uncheck one only when you want retrieval to ignore that document group.
-          </p>
-          <div className="space-y-2">
-            {corpora.map((corpus) => {
-              const selected = selectedCorpusIds.includes(corpus.id);
-              return (
-              <button
-                key={corpus.id}
                 type="button"
-                onClick={() => onToggleCorpus(corpus.id)}
+                onClick={() => onSelectHistory(item)}
                 className={cn(
-                  "w-full rounded-2xl border p-3 text-left shadow-sm transition",
-                  selected
-                    ? "border-blue-200 bg-blueglass text-ink"
-                    : "border-white/70 bg-white/48 text-graphite hover:bg-white/82",
+                  "focus-ring w-full rounded-xl border p-3 text-left transition duration-200",
+                  active
+                    ? "border-accent/25 bg-blue-50/75 shadow-sm"
+                    : "border-transparent bg-transparent hover:border-slate-200 hover:bg-slate-50",
                 )}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="text-sm font-semibold leading-5 text-ink">{corpus.name}</h3>
-                  <span
-                    className={cn(
-                      "grid h-5 w-5 shrink-0 place-items-center rounded-full ring-1",
-                      selected ? "bg-ink text-white ring-ink" : "bg-white text-transparent ring-slate-200",
-                    )}
-                  >
-                    <Check size={12} />
+                <p className="line-clamp-2 text-sm font-medium leading-5 text-ink">{item.question}</p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-graphite">
+                    <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", meta.dot)} />
+                    <span className="truncate">{meta.compact}</span>
                   </span>
+                  <span className="shrink-0 text-[10px] text-slate-400">{item.timestamp}</span>
                 </div>
-                <p className="mt-1 text-xs leading-5 text-graphite">{corpus.description}</p>
-                <p className="mt-2 text-[11px] font-medium text-graphite">{corpus.documentCount} mapped files</p>
-                <p className="mt-1 line-clamp-2 font-mono text-[10px] leading-4 text-slate-500">
-                  {corpus.sources.join(", ")}
-                </p>
               </button>
-            );})}
-          </div>
-        </section>
+            );
+          }) : (
+            <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs leading-5 text-graphite">
+              Completed runs stay here for this session. Select one to restore the full decision.
+            </div>
+          )}
+        </div>
+
+        <p className="mt-4 border-t border-slate-200 pt-4 text-[10px] leading-4 text-slate-400">
+          EvalRAG is decision support, not an automated launch authority.
+        </p>
       </div>
     </aside>
   );

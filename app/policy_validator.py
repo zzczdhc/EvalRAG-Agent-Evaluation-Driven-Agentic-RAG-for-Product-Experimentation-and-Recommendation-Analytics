@@ -15,6 +15,15 @@ DECISION_PRIORITIES = {
     "launch": 10,
 }
 
+DECISION_SAFETY = {
+    "launch": 0,
+    "partial_rollout": 1,
+    "investigate_further": 2,
+    "use_did_or_quasi_experiment": 3,
+    "do_not_launch": 4,
+    "do_not_trust_result": 5,
+}
+
 
 def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower()).strip()
@@ -45,7 +54,15 @@ def _finding(
 def _tool_srm_failed(tool_summary: dict[str, Any] | None) -> bool:
     if not tool_summary:
         return False
-    return tool_summary.get("srm", {}).get("classification") == "fail"
+    srm = tool_summary.get("srm")
+    return isinstance(srm, dict) and srm.get("classification") == "fail"
+
+
+def _tool_validation_failed(tool_summary: dict[str, Any] | None) -> bool:
+    if not tool_summary:
+        return False
+    validation = tool_summary.get("validation")
+    return isinstance(validation, dict) and validation.get("valid") is False
 
 
 def _tool_guardrail_flags(tool_summary: dict[str, Any] | None) -> list[str]:
@@ -63,14 +80,39 @@ def _tool_clean_win(tool_summary: dict[str, Any] | None) -> bool:
     if not tool_summary:
         return False
     validation_valid = tool_summary.get("validation", {}).get("valid") is True
-    srm_passed = tool_summary.get("srm", {}).get("classification") == "pass"
+    srm = tool_summary.get("srm")
+    srm_passed = isinstance(srm, dict) and srm.get("classification") == "pass"
     metric_lifts = tool_summary.get("metric_lifts", [])
     lift_by_metric = {item.get("metric"): item for item in metric_lifts if isinstance(item, dict)}
-    revenue_win = lift_by_metric.get("revenue", {}).get("absolute_lift", 0) > 0
+    tests = tool_summary.get("tests", [])
+    tests_by_metric = {item.get("metric"): item for item in tests if isinstance(item, dict)}
+    revenue = lift_by_metric.get("revenue", {})
+    revenue_test = tests_by_metric.get("revenue", {})
+    required_metrics = {"revenue", "converted", "retained_7d", "complained"}
+    if not required_metrics.issubset(lift_by_metric):
+        return False
+    revenue_p_value = revenue_test.get("p_value")
+    revenue_win = (
+        revenue.get("absolute_lift", 0) > 0
+        and revenue.get("ci_lower", 0) > 0
+        and isinstance(revenue_p_value, (int, float))
+        and float(revenue_p_value) < 0.05
+    )
     conversion_not_harmed = lift_by_metric.get("converted", {}).get("risk_flag") is not True
     guardrails_stable = not _tool_guardrail_flags(tool_summary)
-    segment_risk = any(item.get("risk_flag") for item in tool_summary.get("segments", []) if isinstance(item, dict))
-    return bool(validation_valid and srm_passed and revenue_win and conversion_not_harmed and guardrails_stable and not segment_risk)
+    segments = [item for item in tool_summary.get("segments", []) if isinstance(item, dict)]
+    segment_risk = any(item.get("risk_flag") for item in segments)
+    validation_columns = set(tool_summary.get("validation", {}).get("columns", []))
+    segment_coverage = "segment" not in validation_columns or bool(segments)
+    return bool(
+        validation_valid
+        and srm_passed
+        and revenue_win
+        and conversion_not_harmed
+        and guardrails_stable
+        and not segment_risk
+        and segment_coverage
+    )
 
 
 def validate_decision(
@@ -87,6 +129,17 @@ def validate_decision(
 
     text = normalize_text(question)
     findings: list[dict[str, Any]] = []
+
+    if _tool_validation_failed(tool_summary):
+        findings.append(
+            _finding(
+                "invalid_experiment_data_blocks_launch",
+                "do_not_trust_result",
+                "The uploaded experiment data failed structural or numeric validation, so its metrics cannot support a launch decision.",
+                "tool_summary.validation",
+                DECISION_PRIORITIES["do_not_trust_result"],
+            )
+        )
 
     if _tool_srm_failed(tool_summary) or _contains_any(
         text,
@@ -338,9 +391,16 @@ def validate_decision(
         )
 
     findings.sort(key=lambda item: item["priority"], reverse=True)
-    policy_decision = findings[0]["recommended_decision"] if findings else None
+    blocking_findings = [finding for finding in findings if finding.get("severity") != "supportive"]
+    candidate_decision = blocking_findings[0]["recommended_decision"] if blocking_findings else None
+    if candidate_decision and DECISION_SAFETY.get(candidate_decision, 0) >= DECISION_SAFETY.get(llm_decision, 0):
+        policy_decision = candidate_decision
+    elif llm_decision == "launch" and any(finding["recommended_decision"] == "launch" for finding in findings):
+        policy_decision = "launch"
+    else:
+        policy_decision = None
     final_decision = policy_decision or llm_decision
-    policy_triggered = bool(findings)
+    policy_triggered = policy_decision is not None
     policy_override = bool(policy_decision and policy_decision != llm_decision)
     if policy_override:
         policy_action = "override"

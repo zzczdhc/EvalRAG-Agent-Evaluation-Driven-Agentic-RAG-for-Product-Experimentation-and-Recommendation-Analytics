@@ -79,6 +79,20 @@ class GraphWorkflowTests(unittest.TestCase):
         self.assertEqual(record["decision"], "do_not_trust_result")
         self.assertEqual(record["decision_json"]["decision"], "do_not_trust_result")
 
+    def test_invalid_csv_leads_to_do_not_trust_result(self) -> None:
+        pipeline = EvalRAGPipeline(top_k=3, alpha=0.65)
+        csv_text = "user_id,group,revenue\nu1,control,10\nu1,control,11\n"
+        with patch("app.rag_pipeline.generate_llm_answer", return_value=_memo_for("launch")):
+            record = pipeline.answer(
+                "Revenue increased. Should we launch?",
+                csv_text=csv_text,
+                log=False,
+            )
+
+        self.assertFalse(record["tool_summary"]["validation"]["valid"])
+        self.assertEqual(record["decision"], "do_not_trust_result")
+        self.assertEqual(record["decision_json"]["decision"], "do_not_trust_result")
+
     def test_non_random_rollout_leads_to_quasi_experiment(self) -> None:
         pipeline = EvalRAGPipeline(top_k=3, alpha=0.65)
         with patch("app.rag_pipeline.generate_llm_answer", return_value=_memo_for("launch", "did_policy_analysis.md")):

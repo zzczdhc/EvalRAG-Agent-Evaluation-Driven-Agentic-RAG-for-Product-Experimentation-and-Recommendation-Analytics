@@ -45,12 +45,17 @@ CORPUS_SOURCE_MAP: dict[str, list[str]] = {
 def resolve_corpus_sources(corpus_ids: list[str] | None) -> list[str]:
     """Return source filenames allowed by selected corpus ids.
 
-    Empty selection means no corpus filter. Unknown ids are ignored so callers can
-    safely pass frontend-only placeholders while backend metadata evolves.
+    Empty selection means no corpus filter. Unknown ids are rejected so a typo
+    cannot silently broaden a supposedly scoped retrieval to the full corpus.
     """
 
     if not corpus_ids:
         return []
+    unknown_ids = sorted(set(corpus_ids) - set(CORPUS_SOURCE_MAP))
+    if unknown_ids:
+        raise ValueError(f"Unknown corpus id(s): {', '.join(unknown_ids)}")
+    if "all-playbooks" in corpus_ids:
+        return list(CORPUS_SOURCE_MAP["all-playbooks"])
     sources: list[str] = []
     for corpus_id in corpus_ids:
         sources.extend(CORPUS_SOURCE_MAP.get(corpus_id, []))

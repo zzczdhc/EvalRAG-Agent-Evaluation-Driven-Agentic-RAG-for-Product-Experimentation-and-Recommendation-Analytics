@@ -1,375 +1,158 @@
-import { AlertTriangle, ArrowRight, BarChart3, CheckCircle2, ClipboardList, FileText, Gauge, Route, ShieldAlert } from "lucide-react";
-import type { AnalysisResult, DiagnosticResult, Recommendation } from "@/lib/types";
+"use client";
+
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { Check, Clipboard, Download, FileSearch, Gauge, Route } from "lucide-react";
+import { DecisionOverview } from "@/components/DecisionOverview";
+import { DiagnosticsPanel } from "@/components/DiagnosticsPanel";
+import { EvidencePanel } from "@/components/EvidencePanel";
+import { TracePanel } from "@/components/TracePanel";
+import { decisionMeta } from "@/lib/decisions";
+import type { AnalysisResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-function summarizeDetails(details?: Record<string, unknown>) {
-  if (!details) return "No detail payload.";
-  const preferredKeys = [
-    "task_type",
-    "planned_tools",
-    "retrieved_chunk_count",
-    "top_sources",
-    "status",
-    "reasons",
-    "final_decision",
-    "policy_action",
-  ];
-  const lines = preferredKeys
-    .filter((key) => details[key] !== undefined)
-    .map((key) => `${key}: ${Array.isArray(details[key]) ? (details[key] as unknown[]).join(", ") : String(details[key])}`);
-  return lines.length ? lines.join("\n") : JSON.stringify(details, null, 2);
-}
+type ResultTab = "decision" | "diagnostics" | "evidence" | "trace";
 
-type ResultMemoProps = {
-  result: AnalysisResult | null;
-  isLoading?: boolean;
-};
-
-const recommendationStyle: Record<Recommendation, string> = {
-  Launch: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  "Do Not Launch": "bg-rose-50 text-rose-700 ring-rose-200",
-  "Launch with Guardrails": "bg-blue-50 text-blue-700 ring-blue-200",
-  "Needs More Investigation": "bg-amber-50 text-amber-700 ring-amber-200",
-};
-
-const diagnosticStyle: Record<DiagnosticResult["status"], string> = {
-  pass: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  watch: "bg-amber-50 text-amber-700 ring-amber-200",
-  risk: "bg-rose-50 text-rose-700 ring-rose-200",
-};
-
-const highlightTerms = [
-  "sample ratio mismatch",
-  "confidence interval",
-  "guardrail",
-  "retention",
-  "revenue",
-  "conversion",
-  "complaint",
-  "segment",
-  "launch",
-  "rollout",
-  "randomized",
-  "treatment",
-  "control",
-  "metric",
-  "SRM",
-  "CTR",
-  "CVR",
-  "DiD",
-  "p-value",
+const tabs: Array<{ id: ResultTab; label: string; icon: typeof Clipboard }> = [
+  { id: "decision", label: "Decision brief", icon: Clipboard },
+  { id: "diagnostics", label: "Diagnostics", icon: Gauge },
+  { id: "evidence", label: "Evidence", icon: FileSearch },
+  { id: "trace", label: "Trace", icon: Route },
 ];
 
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function HighlightedSnippet({ text }: { text: string }) {
-  const pattern = new RegExp(`(${highlightTerms.map(escapeRegex).join("|")})`, "gi");
-  return text.split(pattern).map((part, index) => {
-    const isMatch = highlightTerms.some((term) => term.toLowerCase() === part.toLowerCase());
-    if (!isMatch) return <span key={`${part}-${index}`}>{part}</span>;
-    return (
-      <mark key={`${part}-${index}`} className="rounded-md bg-amber-100/80 px-1 py-0.5 text-amber-900 ring-1 ring-amber-200/70">
-        {part}
-      </mark>
-    );
-  });
-}
-
-function MetricBar({ label, value }: { label: string; value?: number | null }) {
-  const percent = typeof value === "number" && Number.isFinite(value) ? Math.round(value * 100) : null;
+function LoadingPanel() {
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-xs font-semibold text-graphite">
-        <span>{label}</span>
-        <span>{percent === null ? "N/A" : `${percent}%`}</span>
-      </div>
-      <div className="h-2 rounded-full bg-slate-200/80">
-        <div
-          className={cn("h-2 rounded-full", percent === null ? "bg-slate-300/70" : "bg-ink")}
-          style={{ width: percent === null ? "14%" : `${Math.max(4, Math.min(percent, 100))}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function Section({ title, icon: Icon, children }: { title: string; icon: typeof FileText; children: React.ReactNode }) {
-  return (
-    <section className="rounded-[24px] border border-white/80 bg-white/60 p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-2">
-        <div className="grid h-8 w-8 place-items-center rounded-xl bg-slate-100 text-ink ring-1 ring-slate-200">
-          <Icon size={16} />
-        </div>
-        <h3 className="text-sm font-semibold text-ink">{title}</h3>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function ThinkingPanel() {
-  return (
-    <section className="glass-panel liquid-edge rounded-[34px] p-5 sm:p-6">
-      <div className="flex items-center gap-3">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-white/80 bg-white/72 shadow-sm">
-          <span className="h-4 w-4 rounded-full bg-ink thinking-shimmer" />
-        </div>
+    <section className="data-card state-enter overflow-hidden p-5 sm:p-6" aria-live="polite">
+      <div className="h-1 overflow-hidden rounded-full bg-slate-100"><div className="indeterminate-bar h-full w-1/2 rounded-full bg-accent" /></div>
+      <div className="mt-5 flex items-start gap-3">
+        <span className="mt-1 h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-accent" />
         <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-            <span>Agent is thinking</span>
-            <span className="flex items-center gap-1">
-              <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-graphite" />
-              <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-graphite" />
-              <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-graphite" />
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-graphite">Planning · retrieving · validating</p>
+          <h2 className="text-base font-semibold text-ink">Running live analysis</h2>
+          <p className="mt-1 text-sm leading-6 text-graphite">Validating the request, computing available diagnostics, retrieving playbook evidence, applying policy checks, and writing the memo.</p>
+          <p className="mt-2 text-xs text-slate-400">Only output returned by the live pipeline will appear here.</p>
         </div>
       </div>
     </section>
   );
 }
 
-export function ResultMemo({ result, isLoading = false }: ResultMemoProps) {
-  if (isLoading) {
-    return <ThinkingPanel />;
+export function ResultMemo({ result, isLoading = false }: { result: AnalysisResult | null; isLoading?: boolean }) {
+  const [activeTab, setActiveTab] = useState<ResultTab>("decision");
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const copyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+  }, []);
+
+  if (isLoading) return <LoadingPanel />;
+  if (!result) return null;
+
+  const meta = decisionMeta[result.decision];
+  const queryId = result.trace?.queryId;
+  const memoText = [
+    `EvalRAG decision: ${meta.label}`,
+    "",
+    result.summary,
+    "",
+    "Evidence",
+    ...result.evidence.map((item) => `- ${item}`),
+    "",
+    "Risks",
+    ...result.risks.map((item) => `- ${item}`),
+    "",
+    "Next actions",
+    ...result.nextActions.map((item, index) => `${index + 1}. ${item}`),
+  ].join("\n");
+
+  async function copyMemo() {
+    try {
+      await navigator.clipboard.writeText(memoText);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("failed");
+    }
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = window.setTimeout(() => setCopyStatus("idle"), 1600);
   }
 
-  if (!result) {
-    return (
-      <section className="glass-panel liquid-edge rounded-[34px] p-8 text-center">
-        <div className="mx-auto grid h-14 w-14 place-items-center rounded-3xl bg-white/76 text-ink shadow-soft ring-1 ring-white/80">
-          <ClipboardList size={23} />
-        </div>
-        <h2 className="mt-5 text-xl font-semibold tracking-tight text-ink">Your launch memo will appear here</h2>
-        <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-graphite">
-          Submit a question to generate a structured recommendation with evidence, retrieved playbook context,
-          diagnostics, and evaluation metrics.
-        </p>
-      </section>
-    );
+  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? tabs.length - 1
+        : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    const nextTab = tabs[nextIndex];
+    setActiveTab(nextTab.id);
+    document.getElementById(`result-tab-${nextTab.id}`)?.focus();
+  }
+
+  function downloadMemo() {
+    const blob = new Blob([memoText], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `evalrag-${queryId ?? "decision"}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
-    <section className="glass-panel liquid-edge rounded-[34px] p-5 sm:p-6">
-      <div className="flex flex-col gap-4 border-b border-line pb-5 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-graphite">Launch Decision Memo</p>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <h2 className="text-2xl font-semibold tracking-tight text-ink">Recommendation</h2>
-            <span className={cn("rounded-full px-3 py-1.5 text-sm font-semibold ring-1", recommendationStyle[result.recommendation])}>
-              {result.recommendation}
-            </span>
-          </div>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-graphite">{result.summary}</p>
+    <section className="state-enter space-y-3">
+      <div className="glass-shell flex flex-col gap-3 rounded-[18px] px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+        <div className="flex items-center gap-2 px-1 text-xs font-medium text-graphite">
+          <span className="h-2 w-2 rounded-full bg-success" />
+          Live analysis result
+          {result.trace?.queryId ? <span className="hidden font-mono text-[10px] text-slate-400 sm:inline">· {result.trace.queryId}</span> : null}
         </div>
-        <div className="rounded-[22px] border border-white/80 bg-white/66 p-4 shadow-sm lg:w-[300px]">
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-            <Gauge size={16} />
-            Live diagnostics
-          </div>
-          <div className="space-y-3">
-            <MetricBar label="Faithfulness" value={result.evaluation.faithfulness} />
-            <MetricBar label="Context precision" value={result.evaluation.contextPrecision} />
-            <MetricBar label="Answer relevance" value={result.evaluation.answerRelevance} />
-            <MetricBar label="Decision confidence" value={result.evaluation.decisionConfidence} />
-          </div>
-          <p className="mt-3 text-[11px] leading-5 text-graphite">
-            Full Ragas scores require saved eval records with ground truth; live questions only show metrics returned by the backend.
-          </p>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => void copyMemo()} className="focus-ring inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-graphite transition duration-150 hover:text-ink">
+            {copyStatus === "copied" ? <Check size={13} className="text-success" /> : <Clipboard size={13} />}
+            <span aria-live="polite">{copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Copy failed" : "Copy memo"}</span>
+          </button>
+          <button type="button" onClick={downloadMemo} className="focus-ring inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-graphite transition duration-150 hover:text-ink">
+            <Download size={13} /> Export
+          </button>
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 xl:grid-cols-2">
-        <Section title="Evidence" icon={CheckCircle2}>
-          <ul className="space-y-2 text-sm leading-6 text-graphite">
-            {result.evidence.map((item) => (
-              <li key={item} className="flex gap-2">
-                <ArrowRight className="mt-1 shrink-0 text-emerald-600" size={14} />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </Section>
-
-        <Section title="Risks" icon={ShieldAlert}>
-          <ul className="space-y-2 text-sm leading-6 text-graphite">
-            {result.risks.map((item) => (
-              <li key={item} className="flex gap-2">
-                <AlertTriangle className="mt-1 shrink-0 text-amber-600" size={14} />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      </div>
-
-      <div className="mt-4 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-        <Section title="Diagnostics run" icon={BarChart3}>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {result.diagnostics.map((diagnostic) => (
-              <div key={diagnostic.label} className="rounded-2xl border border-white/80 bg-white/64 p-3">
-                <p className="text-xs font-medium text-graphite">{diagnostic.label}</p>
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-ink">{diagnostic.value}</p>
-                  <span className={cn("rounded-full px-2 py-1 text-[11px] font-semibold ring-1", diagnosticStyle[diagnostic.status])}>
-                    {diagnostic.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Section>
-
-        <Section title="Retrieved context" icon={FileText}>
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-xs leading-5 text-graphite">Collapsed by default. Open a source to inspect the retrieved chunk.</p>
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-graphite ring-1 ring-slate-200">
-              {result.retrievedContext.length} chunks
-            </span>
-          </div>
-          <div className="space-y-2">
-            {result.retrievedContext.map((context, index) => (
-              <details
-                key={`${context.source}-${context.score}-${index}`}
-                className="group rounded-2xl border border-white/80 bg-white/64 p-2 shadow-sm transition duration-200 open:bg-white/86 open:shadow-md"
+      <div className="glass-shell overflow-x-auto rounded-[16px] p-1.5">
+        <div className="flex min-w-max gap-1" role="tablist" aria-label="Analysis result sections">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                id={`result-tab-${tab.id}`}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                aria-controls={`result-panel-${tab.id}`}
+                tabIndex={active ? 0 : -1}
+                onClick={() => setActiveTab(tab.id)}
+                onKeyDown={(event) => handleTabKeyDown(event, tabs.findIndex((item) => item.id === tab.id))}
+                className={cn(
+                  "focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl px-3.5 text-xs font-semibold transition duration-150",
+                  active ? "bg-ink text-white shadow-sm" : "text-graphite hover:bg-white hover:text-ink",
+                )}
               >
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-sm font-semibold text-ink">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-ink text-[11px] font-semibold text-white">
-                      {index + 1}
-                    </span>
-                    <span className="truncate">{context.source}</span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-graphite ring-1 ring-slate-200">
-                      score {context.score.toFixed(2)}
-                    </span>
-                    <span className="text-graphite transition group-open:rotate-90">›</span>
-                  </span>
-                </summary>
-                <div className="soft-reveal mt-2 rounded-xl border border-slate-100 bg-white/76 p-3">
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-slate-50 px-2 py-1 font-mono text-[11px] text-graphite ring-1 ring-slate-200">
-                      retrieved_chunk_{String(index + 1).padStart(2, "0")}
-                    </span>
-                    <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100">
-                      source-grounding
-                    </span>
-                  </div>
-                  <p className="text-sm leading-6 text-graphite">
-                    <HighlightedSnippet text={context.snippet} />
-                  </p>
-                </div>
-              </details>
-            ))}
-          </div>
-        </Section>
-      </div>
-
-      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <Section title="Uncertainty" icon={AlertTriangle}>
-          <p className="text-sm leading-7 text-graphite">{result.uncertainty}</p>
-        </Section>
-        <Section title="Suggested next actions" icon={ClipboardList}>
-          <ol className="space-y-2 text-sm leading-6 text-graphite">
-            {result.nextActions.map((item, index) => (
-              <li key={item} className="flex gap-3">
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-ink text-xs font-semibold text-white">{index + 1}</span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ol>
-        </Section>
-      </div>
-
-      {result.trace ? (
-        <div className="mt-4">
-          <Section title="Agent trace" icon={Route}>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-white/80 bg-white/64 p-3">
-                <p className="text-xs font-medium text-graphite">Task type</p>
-                <p className="mt-1 font-mono text-sm text-ink">{result.trace.taskType ?? "unknown"}</p>
-              </div>
-              <div className="rounded-2xl border border-white/80 bg-white/64 p-3">
-                <p className="text-xs font-medium text-graphite">Evidence status</p>
-                <p className="mt-1 font-mono text-sm text-ink">{result.trace.evidenceSufficiency ?? "unknown"}</p>
-              </div>
-              <div className="rounded-2xl border border-white/80 bg-white/64 p-3">
-                <p className="text-xs font-medium text-graphite">Model backend</p>
-                <p className="mt-1 font-mono text-sm text-ink">{result.trace.generatorBackend ?? "unknown"}</p>
-              </div>
-              <div className="rounded-2xl border border-white/80 bg-white/64 p-3">
-                <p className="text-xs font-medium text-graphite">Top retrieval score</p>
-                <p className="mt-1 font-mono text-sm text-ink">{(result.trace.topRetrievalScore ?? 0).toFixed(3)}</p>
-              </div>
-            </div>
-
-            {result.trace.requiredTools?.length ? (
-              <div className="mt-3 rounded-2xl border border-white/80 bg-white/64 p-3">
-                <p className="text-xs font-medium text-graphite">Tools planned</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {result.trace.requiredTools.map((tool) => (
-                    <span key={tool} className="rounded-full bg-slate-100 px-2 py-1 font-mono text-[11px] text-graphite ring-1 ring-slate-200">
-                      {tool}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {result.trace.selectedSources?.length ? (
-              <div className="mt-3 rounded-2xl border border-white/80 bg-white/64 p-3">
-                <p className="text-xs font-medium text-graphite">Corpus-limited sources</p>
-                <p className="mt-2 text-sm leading-6 text-graphite">{result.trace.selectedSources.join(", ")}</p>
-              </div>
-            ) : null}
-
-            {result.trace.evidenceReasons?.length ? (
-              <div className="mt-3 rounded-2xl border border-white/80 bg-white/64 p-3">
-                <p className="text-xs font-medium text-graphite">Evidence check reasons</p>
-                <ul className="mt-2 space-y-1 text-sm leading-6 text-graphite">
-                  {result.trace.evidenceReasons.map((reason) => (
-                    <li key={reason} className="flex gap-2">
-                      <ArrowRight className="mt-1 shrink-0" size={13} />
-                      <span>{reason}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {result.trace.steps?.length ? (
-              <div className="mt-3 rounded-2xl border border-white/80 bg-white/64 p-3">
-                <p className="text-xs font-medium text-graphite">Raw workflow trace</p>
-                <div className="mt-3 space-y-2">
-                  {result.trace.steps.map((step, index) => (
-                    <details key={`${step.step}-${index}`} className="rounded-xl border border-slate-200 bg-white/70 px-3 py-2">
-                      <summary className="cursor-pointer text-sm font-semibold text-ink">
-                        {String(index + 1).padStart(2, "0")} · {step.step} · {step.status}
-                      </summary>
-                      <pre className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 text-[11px] leading-5 text-slate-100">
-                        {summarizeDetails(step.details)}
-                      </pre>
-                    </details>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {result.rawAnswer ? (
-              <details className="mt-3 rounded-2xl border border-white/80 bg-white/64 p-3">
-                <summary className="cursor-pointer text-xs font-medium text-graphite">Raw backend markdown</summary>
-                <pre className="mt-3 max-h-[360px] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-950 p-3 text-[11px] leading-5 text-slate-100">
-                  {result.rawAnswer}
-                </pre>
-              </details>
-            ) : null}
-          </Section>
+                <Icon size={14} />
+                {tab.label}
+                {tab.id === "diagnostics" && result.metrics.length ? <span className={cn("rounded-full px-1.5 py-0.5 text-[9px]", active ? "bg-white/15" : "bg-slate-100")}>{result.metrics.length}</span> : null}
+              </button>
+            );
+          })}
         </div>
-      ) : null}
+      </div>
+
+      <div role="tabpanel" id={`result-panel-${activeTab}`} aria-labelledby={`result-tab-${activeTab}`}>
+        {activeTab === "decision" ? <DecisionOverview result={result} /> : null}
+        {activeTab === "diagnostics" ? <DiagnosticsPanel result={result} /> : null}
+        {activeTab === "evidence" ? <EvidencePanel result={result} /> : null}
+        {activeTab === "trace" ? <TracePanel result={result} /> : null}
+      </div>
     </section>
   );
 }

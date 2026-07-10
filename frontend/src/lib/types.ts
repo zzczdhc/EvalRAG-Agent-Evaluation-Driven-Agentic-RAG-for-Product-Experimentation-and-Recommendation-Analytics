@@ -1,8 +1,12 @@
-export type Recommendation =
-  | "Launch"
-  | "Do Not Launch"
-  | "Launch with Guardrails"
-  | "Needs More Investigation";
+export type DecisionCode =
+  | "launch"
+  | "do_not_launch"
+  | "partial_rollout"
+  | "investigate_further"
+  | "do_not_trust_result"
+  | "use_did_or_quasi_experiment";
+
+export type AnalysisMode = "live" | "demo";
 
 export type Corpus = {
   id: string;
@@ -13,17 +17,55 @@ export type Corpus = {
   status: "ready" | "draft";
 };
 
-export type AnalysisHistoryItem = {
-  id: string;
-  title: string;
-  timestamp: string;
-  recommendation: Recommendation;
+export type PolicyFinding = {
+  policyId: string;
+  recommendedDecision: DecisionCode;
+  reason: string;
+  evidence: string;
+  severity?: string;
 };
 
-export type DiagnosticResult = {
-  label: string;
-  value: string;
-  status: "pass" | "watch" | "risk";
+export type DecisionChain = {
+  draftDecision: DecisionCode;
+  policyDecision: DecisionCode | null;
+  finalDecision: DecisionCode;
+  policyAction: "override" | "confirm" | "none";
+  findings: PolicyFinding[];
+};
+
+export type ValidationSummary = {
+  valid: boolean;
+  rowCount: number | null;
+  columns: string[];
+  errors: string[];
+  warnings: string[];
+  groupCounts: Record<string, number>;
+};
+
+export type SrmSummary = {
+  classification: "pass" | "fail" | "not_run";
+  controlN: number | null;
+  treatmentN: number | null;
+  pValue: number | null;
+  alpha: number | null;
+  reason?: string;
+};
+
+export type MetricDiagnostic = {
+  metric: string;
+  controlMean: number | null;
+  treatmentMean: number | null;
+  absoluteLift: number | null;
+  liftPct: number | null;
+  ciLower: number | null;
+  ciUpper: number | null;
+  pValue: number | null;
+  riskFlag: boolean;
+  status: "positive" | "neutral" | "risk";
+};
+
+export type SegmentDiagnostic = MetricDiagnostic & {
+  segment: string;
 };
 
 export type EvaluationMetrics = {
@@ -43,7 +85,6 @@ export type AnalysisTrace = {
   evidenceSufficiency?: string;
   evidenceReasons?: string[];
   topRetrievalScore?: number;
-  policyAction?: string;
   generatorBackend?: string;
   model?: string;
   steps?: Array<{
@@ -60,7 +101,8 @@ export type RetrievedContext = {
 };
 
 export type AnalysisResult = {
-  recommendation: Recommendation;
+  mode: AnalysisMode;
+  decision: DecisionCode;
   summary: string;
   rawAnswer?: string;
   evidence: string[];
@@ -68,13 +110,27 @@ export type AnalysisResult = {
   uncertainty: string;
   nextActions: string[];
   retrievedContext: RetrievedContext[];
-  diagnostics: DiagnosticResult[];
+  validation: ValidationSummary | null;
+  srm: SrmSummary | null;
+  metrics: MetricDiagnostic[];
+  segments: SegmentDiagnostic[];
   evaluation: EvaluationMetrics;
+  decisionChain: DecisionChain;
   trace?: AnalysisTrace;
+  latencySeconds: number | null;
+  model?: string;
 };
 
-export type AnalyzeRequest = {
+export type AnalysisHistoryItem = {
+  id: string;
   question: string;
-  selectedCorpusIds: string[];
-  csvFileName?: string;
+  timestamp: string;
+  result: AnalysisResult;
+  fileName?: string;
+};
+
+export type AnalysisErrorPayload = {
+  mode: "error";
+  error: string;
+  detail?: string;
 };
